@@ -52,7 +52,7 @@ void set_voltage(unsigned int set_voltage) {
     unsigned int downlimit = 125;
 
     if(set_voltage > downlimit && set_voltage <= uplimit) {
-        OCR1A = set_voltage - 125 + 4;
+        OCR1A = set_voltage - 125;
         voltage = set_voltage;
     } else if (set_voltage > uplimit) {
         OCR1A = uplimit - 125;
@@ -67,26 +67,40 @@ unsigned int get_voltage() {
     return voltage;
 }
 
+/* TIMER0B
+ * init_display asettaa kellon fosc/8 = 1MHz
+ */
+void init_delay_timer(void) {
+    TIMSK0 |= _BV(OCIE0B);
+}
+
+ISR(TIMER0_COMPB_vect) {
+
+}
+
 /* ADC */
 
+#define ADCREF11 1100.0
+#define ADCREFVCC 5000.0
+#define ADCREFINIT ADCREF11
+
 #define AVERAGES 10
-volatile unsigned int current_in; // adc value (0-1024)
 volatile unsigned int cur_avg[AVERAGES]; // adc values (0-1024)
 
 
 void init_adc(void) {
-    // AVCC with external capacitor at AREF pin
+    // 1.1V with external capacitor at AREF pin
     // select ADC3
-    ADMUX |= _BV(REFS0) | _BV(MUX0) | _BV(MUX1);
+    ADMUX |= _BV(REFS0) | _BV(REFS1) | _BV(MUX0) | _BV(MUX1);
     // ADC-clk = 1MHz / 8 = 125kHz
     ADCSRA |= _BV(ADEN) | _BV(ADSC) | _BV(ADIE) | _BV(ADPS0) | _BV(ADPS1) | _BV(ADPS2);
-    current_in = 0;
 
     int i = 0;
     for(; i<AVERAGES;i++) {
         cur_avg[i] = 0;
     }
     cur_avg_calculated = 0;
+    adc_reference = ADCREFINIT;
 }
 
 /*
@@ -95,23 +109,40 @@ void init_adc(void) {
  * Sense resistor = 0.22ohm
  */
 void calc_current_average(void) {
-    unsigned long avg = 0;
+    float avg = 0.0;
     unsigned int i = 0;
     for(;i<AVERAGES;i++) {
         avg += (cur_avg[i]);
     }
+
     // tweak last multiplier to show correct current...
-    cur_avg_calculated = (((avg/AVERAGES) * 500) / 1024) * 4.1;
+    // ((x*1100)/1024))/(0.25*10.08)
+    avg = ((avg/AVERAGES) * adc_reference) / 1024.0;
+    cur_avg_calculated = 0.421277 * avg;
+
+    if(adc_reference < ADCREFVCC && cur_avg_calculated > 450) {
+        adc_reference = ADCREFVCC;
+        ADMUX &= ~(_BV(REFS1));
+    } else if ( adc_reference > ADCREF11  && cur_avg_calculated < 430) {
+        adc_reference = ADCREF11;
+        ADMUX |= _BV(REFS1);
+    }
+
 }
 
 ISR(ADC_vect) {
     static unsigned int curIndx = 0;
-    current_in = ADC;
-    cur_avg[curIndx] = current_in;
-    if(curIndx < AVERAGES - 1) {
-        curIndx++;
+    static float adc_reference_prev = ADCREFINIT;
+    // if reference changes, discard adc result
+    if(adc_reference_prev == adc_reference) {
+        cur_avg[curIndx] = ADC;
+        if(curIndx < AVERAGES - 1) {
+            curIndx++;
+        } else {
+            curIndx = 0;
+        }
     } else {
-        curIndx = 0;
+        adc_reference_prev = adc_reference;
     }
 
     ADCSRA |= _BV(ADSC); // start new conversion
@@ -214,6 +245,7 @@ void spi_send_word(uint16_t word) {
 void spi_init(void) {
     DDRB |= _BV(DDB2) | _BV(DDB3) | _BV(DDB5); // SS, MOSI, SCK | output
     SPCR |= _BV(SPE) | _BV(SPIE) | _BV(MSTR) | _BV(CPOL) | _BV(DORD);
+    SPSR |= _BV(SPI2X);
     sending_word = 0;
 }
 

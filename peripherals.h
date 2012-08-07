@@ -18,23 +18,26 @@
 void init_io(void);
 
 /* ADC */
-
+volatile float adc_reference;
 volatile unsigned int cur_avg_calculated; // mA
 void calc_current_average(void);
 void init_adc();
 
 /* ENCODERS */
-#define STARTUP_VOLTAGE 400
+#define STARTUP_VOLTAGE 150
 
 void init_encoders(void);
 
-/* PWM */
-volatile unsigned int voltage;
+/* TIMERS */
 
-void init_16_bit_pwm(void);
+    /* voltage */
+    volatile unsigned int voltage;
+    void init_16_bit_pwm(void);
+    void set_voltage(unsigned int set_voltage);
+    unsigned int get_voltage();
 
-void set_voltage(unsigned int set_voltage);
-unsigned int get_voltage();
+    /* delay timer, TIMER0B */
+    void init_delay_timer(void);
 
 /* SPI */
 #define spi_begin() PORTB &= ~(_BV(PB2));
