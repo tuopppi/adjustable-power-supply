@@ -39,7 +39,7 @@ void init_encoders(void);
     /* set timer for callback function
      * returns 1 on success and
      * 0 if timer is busy */
-    uint8_t set_timeout(uint16_t ms, void (*callback)(void));
+    uint8_t add_timer_callback(uint16_t ms, void (*callback)(void));
     void init_delay_timer(void);
 
 /* SPI */

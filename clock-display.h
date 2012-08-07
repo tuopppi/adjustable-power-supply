@@ -11,6 +11,9 @@
 
 #include "mode.h"
 
+
+void test_function(void);
+
 void display_blink(char bool);
 void display_init(void);
 unsigned int get_display_readout(void);

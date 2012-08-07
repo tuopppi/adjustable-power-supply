@@ -79,6 +79,10 @@ unsigned int get_display_readout(void) {
     return readout;
 }
 
+void test_function(void) {
+    show_dots ^= 1;
+}
+
 uint16_t get_readout_segments(unsigned int seq) {
     if (readout < 3000 && readout >= 0) {
         uint16_t segments = 0;

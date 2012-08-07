@@ -11,10 +11,10 @@
 #include <avr/interrupt.h>
 #include <inttypes.h>
 #include <avr/io.h>
+#include <stdlib.h>
 
 /* IO */
 
-// TODO: TARKISTA...
 void init_io(void) {
    // DDRC |= _BV(DDC2); // OUTPUT ENABLE (alhaalla aktiivinen)
    // enable_output();
@@ -69,45 +69,91 @@ unsigned int get_voltage() {
 
 /* TIMER2 */
 
-static void (*callback_func)(void) = 0;
-volatile uint16_t timeout_counter_ms;
+typedef struct job {
+    void (*callback)(void);
+    uint16_t timeout;
+    void* next;
+    void* prev;
+} job;
+
+job* first_job_p = NULL;
+
 void init_delay_timer(void) {
     TCCR2A |= _BV(WGM21); // CTC
     OCR2A = 8; // ~1ms
     TCCR2B |= _BV(CS22) | _BV(CS21) | _BV(CS20); // clk/1024
-    timeout_counter_ms = 0;
 }
 
-uint8_t set_timeout(uint16_t ms, void (*callback)(void)) {
-    // uset sets new callback function and there is no ongoing timeout job
-    if(callback > 0 && callback_func == 0) {
-        callback_func = callback;
-        timeout_counter_ms = ms;
+uint8_t add_timer_callback(uint16_t ms, void (*callback)(void)) {
 
-        // reset timer and enable interrupts
-        TCNT2 = 0;
-        TIMSK2 |= _BV(OCIE2A);
-    }
-    // user sets same callback function and there is countdown still going
-    else if( callback == callback_func && timeout_counter_ms > 0) {
-        timeout_counter_ms = ms;
-    }
-    // cannot set new timeout if there is previous still going
-    else {
+    job* new_job_p = malloc(sizeof(job));
+    if(new_job_p != NULL) {
+        new_job_p->callback = callback;
+        new_job_p->timeout = ms;
+        new_job_p->next = NULL;
+    } else {
         return 0;
     }
+
+    if(first_job_p == NULL) {
+        new_job_p->prev = NULL;
+        first_job_p = new_job_p;
+    } else {
+        job* loop_p = first_job_p;
+        while(loop_p->next != NULL) {
+            loop_p = loop_p->next;
+        }
+        loop_p->next = new_job_p;
+        new_job_p->prev = loop_p;
+    }
+
+    // enable interrupts
+    TIMSK2 |= _BV(OCIE2A);
 
     return 1;
 }
 
 ISR(TIMER2_COMPA_vect) {
-    if(callback_func != 0 && timeout_counter_ms == 0) {
-        (*callback_func)();
-        callback_func = 0;
-        TIMSK2 &= ~(_BV(OCIE2A));
-    } else if(timeout_counter_ms > 0 && callback_func != 0) {
-        timeout_counter_ms--;
+    job* loop_p = first_job_p;
+    while(loop_p != NULL) {
+        // time for callback
+        if(loop_p->timeout == 0 && loop_p->callback != NULL) {
+            (*loop_p->callback)();
+            loop_p->callback = NULL;
+            loop_p = (job*)loop_p->next;
+        }
+        else if(loop_p->timeout > 0 && loop_p->callback != NULL) {
+            loop_p->timeout--;
+            loop_p = (job*)loop_p->next;
+        }
+        else {
+            job* tmp = loop_p;
+            // poistetaan ensimmäinen
+            if(tmp == first_job_p) {
+                first_job_p = tmp->next;
+                if(tmp->next != NULL) {
+                    ((job*)tmp->next)->prev = NULL;
+                }
+            }
+            // poistetaan keskeltä
+            else if(tmp->next != NULL && tmp->prev != NULL) {
+                ((job*)tmp->prev)->next = tmp->next;
+                ((job*)tmp->next)->prev = tmp->prev;
+            }
+            // poistetaan lopusta
+            else {
+                ((job*)tmp->prev)->next = NULL;
+            }
+            loop_p = (job*)tmp->next;
+            free(tmp);
+        }
+
     }
+
+    if(first_job_p == NULL) {
+        TIMSK2 &= ~(_BV(OCIE2A));
+    }
+
 }
 
 /* ADC */
@@ -118,7 +164,6 @@ ISR(TIMER2_COMPA_vect) {
 
 #define AVERAGES 10
 volatile unsigned int cur_avg[AVERAGES]; // adc values (0-1024)
-
 
 void init_adc(void) {
     // 1.1V with external capacitor at AREF pin
@@ -243,8 +288,10 @@ ISR(INT0_vect) {
 
 // ENCODER 2, current limit
 ISR(PCINT2_vect) {
-    set_current_limit(get_current_limit() + 5 * read_encoder(1));
-    set_timeout(2000, &return_previous_mode);
+    set_current_limit(get_current_limit() + (5 * read_encoder(1)) / 2);
+    if(!add_timer_callback(2000, &return_previous_mode)) {
+        test_function();
+    }
     set_mode(DISP_MODE_CURRENT_SET);
 }
 
