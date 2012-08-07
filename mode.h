@@ -14,10 +14,7 @@
 #define DISP_MODE_CURRENT_SET 3
 #define DISP_MODE_POWER 4
 
-void set_mode_timeout(unsigned int ms);
-// reading timeout zeros it
-unsigned int get_mode_timeout(void);
-
+void return_previous_mode(void);
 void set_mode(char mode);
 char get_mode(void);
 

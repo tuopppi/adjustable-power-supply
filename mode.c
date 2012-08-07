@@ -9,30 +9,25 @@
 #include "mode.h"
 #include <avr/io.h>
 
+
+
 char display_mode;
-volatile unsigned int mode_timeout;
-
-void set_mode_timeout(unsigned int ms) {
-    mode_timeout = ms / 5;
-}
-
-unsigned int get_mode_timeout(void) {
-    unsigned int save = mode_timeout;
-    mode_timeout = 0;
-    return save;
-}
+char prev_display_mode;
 
 /* display */
-void set_mode(char mode) {
-    if(mode >= 1 && mode <= 4) {
-        display_mode = mode;
-    } else {
-        display_mode = DISP_MODE_VOLTAGE;
+void set_mode(char new_mode) {
+    if(new_mode >= 1 && new_mode <= 4 && new_mode != display_mode) {
+        prev_display_mode = display_mode;
+        display_mode = new_mode;
     }
 }
 
 char get_mode() {
     return display_mode;
+}
+
+void return_previous_mode(void) {
+    set_mode(prev_display_mode);
 }
 
 /* limits */

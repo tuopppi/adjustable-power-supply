@@ -21,6 +21,8 @@ int main(void) {
 
     init_16_bit_pwm();
 
+    init_delay_timer();
+
     spi_init();
     display_init();
     init_encoders();

@@ -67,15 +67,47 @@ unsigned int get_voltage() {
     return voltage;
 }
 
-/* TIMER0B
- * init_display asettaa kellon fosc/8 = 1MHz
- */
+/* TIMER2 */
+
+static void (*callback_func)(void) = 0;
+volatile uint16_t timeout_counter_ms;
 void init_delay_timer(void) {
-    TIMSK0 |= _BV(OCIE0B);
+    TCCR2A |= _BV(WGM21); // CTC
+    OCR2A = 8; // ~1ms
+    TCCR2B |= _BV(CS22) | _BV(CS21) | _BV(CS20); // clk/1024
+    timeout_counter_ms = 0;
 }
 
-ISR(TIMER0_COMPB_vect) {
+uint8_t set_timeout(uint16_t ms, void (*callback)(void)) {
+    // uset sets new callback function and there is no ongoing timeout job
+    if(callback > 0 && callback_func == 0) {
+        callback_func = callback;
+        timeout_counter_ms = ms;
 
+        // reset timer and enable interrupts
+        TCNT2 = 0;
+        TIMSK2 |= _BV(OCIE2A);
+    }
+    // user sets same callback function and there is countdown still going
+    else if( callback == callback_func && timeout_counter_ms > 0) {
+        timeout_counter_ms = ms;
+    }
+    // cannot set new timeout if there is previous still going
+    else {
+        return 0;
+    }
+
+    return 1;
+}
+
+ISR(TIMER2_COMPA_vect) {
+    if(callback_func != 0 && timeout_counter_ms == 0) {
+        (*callback_func)();
+        callback_func = 0;
+        TIMSK2 &= ~(_BV(OCIE2A));
+    } else if(timeout_counter_ms > 0 && callback_func != 0) {
+        timeout_counter_ms--;
+    }
 }
 
 /* ADC */
@@ -209,10 +241,10 @@ ISR(INT0_vect) {
     set_mode(DISP_MODE_VOLTAGE);
 }
 
-// ENCODER 2
+// ENCODER 2, current limit
 ISR(PCINT2_vect) {
     set_current_limit(get_current_limit() + 5 * read_encoder(1));
-    set_mode_timeout(2000);
+    set_timeout(2000, &return_previous_mode);
     set_mode(DISP_MODE_CURRENT_SET);
 }
 

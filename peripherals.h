@@ -36,7 +36,10 @@ void init_encoders(void);
     void set_voltage(unsigned int set_voltage);
     unsigned int get_voltage();
 
-    /* delay timer, TIMER0B */
+    /* set timer for callback function
+     * returns 1 on success and
+     * 0 if timer is busy */
+    uint8_t set_timeout(uint16_t ms, void (*callback)(void));
     void init_delay_timer(void);
 
 /* SPI */

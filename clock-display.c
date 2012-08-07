@@ -104,10 +104,6 @@ uint16_t get_readout_segments(unsigned int seq) {
 #define THRESHOLD_LIMIT 10
 
 ISR(TIMER0_OVF_vect, ISR_NOBLOCK) {
-
-    static unsigned int mode_timeout = 0;
-    unsigned int mode_timeout_tmp;
-
     switch(get_mode()) {
     case DISP_MODE_VOLTAGE:
         set_display_readout(voltage);
@@ -116,13 +112,6 @@ ISR(TIMER0_OVF_vect, ISR_NOBLOCK) {
         set_display_readout(cur_avg_calculated);
         break;
     case DISP_MODE_CURRENT_SET:
-        mode_timeout_tmp = get_mode_timeout();
-        if(mode_timeout_tmp > 0) {
-            mode_timeout = mode_timeout_tmp;
-        }
-        if(mode_timeout == 0) {
-            set_mode(DISP_MODE_CURRENT);
-        }
         set_display_readout(get_current_limit());
         break;
     default:
@@ -145,10 +134,6 @@ ISR(TIMER0_OVF_vect, ISR_NOBLOCK) {
         blink_counter++;
         seq_nbr++;
         cycle_threshold = 0;
-
-        if(mode_timeout > 0) {
-            mode_timeout--;
-        }
     }
     cycle_threshold++;
 }
