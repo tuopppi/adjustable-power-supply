@@ -30,15 +30,14 @@
 #include <avr/eeprom.h>
 
 /* IO */
-
 void init_io(void) {
-   // DDRC |= _BV(DDC2); // OUTPUT ENABLE (alhaalla aktiivinen)
-   // enable_output();
-    DDRC |= _BV(DDC1); // mini load output
+    DDRC |= _BV(DDC1); // constant current sink control signal, output
 }
 
 /* PWM */
-void init_16_bit_pwm(void) {
+volatile uint16_t voltage;
+
+void init_voltage_pwm(void) {
     // Waveform outputs
     DDRB |= _BV(PB1);
 
@@ -63,7 +62,7 @@ void init_16_bit_pwm(void) {
     TCCR1B |= _BV(CS10);
 }
 
-void set_voltage(unsigned int set_voltage) {
+void set_voltage(uint16_t set_voltage) {
     unsigned int uplimit = 1060;
     unsigned int downlimit = 125;
 
@@ -79,7 +78,7 @@ void set_voltage(unsigned int set_voltage) {
     }
 }
 
-unsigned int get_voltage() {
+uint16_t get_voltage() {
     return voltage;
 }
 
@@ -100,7 +99,11 @@ void init_delay_timer(void) {
     TCCR2B |= _BV(CS22) | _BV(CS21) | _BV(CS20); // clk/1024
 }
 
-uint8_t add_timer_callback(uint16_t ms, void (*callback)(void), uint8_t replace) {
+uint8_t add_job(uint16_t ms, void (*callback)(void), uint8_t replace) {
+    if(OCR2A == 0) {
+        init_delay_timer();
+    }
+
     job* loop_p;
     if(replace) {
         loop_p = first_job_p;
@@ -149,35 +152,36 @@ ISR(TIMER2_COMPA_vect) {
             loop_p->callback = NULL;
             loop_p = (job*)loop_p->next;
         }
+        // decrement timeout every millisecond
         else if(loop_p->timeout > 0 && loop_p->callback != NULL) {
             loop_p->timeout--;
             loop_p = (job*)loop_p->next;
         }
         else {
             job* tmp = loop_p;
-            // poistetaan ensimmäinen
+            // free first
             if(tmp == first_job_p) {
                 first_job_p = tmp->next;
                 if(tmp->next != NULL) {
                     ((job*)tmp->next)->prev = NULL;
                 }
             }
-            // poistetaan keskeltä
+            // free from middle
             else if(tmp->next != NULL && tmp->prev != NULL) {
                 ((job*)tmp->prev)->next = tmp->next;
                 ((job*)tmp->next)->prev = tmp->prev;
             }
-            // poistetaan lopusta
+            // free from end
             else {
                 ((job*)tmp->prev)->next = NULL;
             }
             loop_p = (job*)tmp->next;
             free(tmp);
         }
-
     }
 
     if(first_job_p == NULL) {
+        // no interrupts needed
         TIMSK2 &= ~(_BV(OCIE2A));
     }
 
@@ -191,6 +195,7 @@ ISR(TIMER2_COMPA_vect) {
 
 #define AVERAGES 10
 volatile unsigned int cur_avg[AVERAGES]; // adc values (0-1024)
+volatile unsigned int adc_reference;
 
 void init_adc(void) {
     // 1.1V with external capacitor at AREF pin
@@ -203,7 +208,7 @@ void init_adc(void) {
     for(; i<AVERAGES;i++) {
         cur_avg[i] = 0;
     }
-    cur_avg_calculated = 0;
+    measured_current = 0;
     adc_reference = ADCREFINIT;
 }
 
@@ -212,7 +217,7 @@ void init_adc(void) {
  * Gain = 10
  * Sense resistor = 0.22ohm
  */
-void calc_current_average(void) {
+void measure_current(void) {
     unsigned long avg = 0;
     unsigned int i = 0;
     for(;i<AVERAGES;i++) {
@@ -222,12 +227,12 @@ void calc_current_average(void) {
     // tweak last multiplier to show correct current...
     // ((x*1100)/1024))/(0.25*10.08)
     avg = ((avg/AVERAGES) * adc_reference) / 1024;
-    cur_avg_calculated = (421277 * avg)/1000000;
+    measured_current = (421277 * avg) / 1000000;
 
-    if(adc_reference < ADCREFVCC && cur_avg_calculated > 450) {
+    if(adc_reference < ADCREFVCC && measured_current > 450) {
         adc_reference = ADCREFVCC;
         ADMUX &= ~(_BV(REFS1));
-    } else if ( adc_reference > ADCREF11  && cur_avg_calculated < 430) {
+    } else if ( adc_reference > ADCREF11  && measured_current < 430) {
         adc_reference = ADCREF11;
         ADMUX |= _BV(REFS1);
     }
@@ -253,18 +258,18 @@ ISR(ADC_vect) {
 }
 
 /* EEPROM */
-uint16_t EEMEM eeprom_voltage;
-uint16_t EEMEM eeprom_current_limit;
+uint16_t EEMEM eeprom_voltage = 125;
+uint16_t EEMEM eeprom_current_limit = 200;
 void save_eeprom_current_limit(void) {
     eeprom_update_word(&eeprom_current_limit, get_current_limit());
 }
 void save_eeprom_voltage(void) {
     eeprom_update_word(&eeprom_voltage, get_voltage());
 }
-unsigned int read_eeprom_current_limit(void) {
+uint16_t read_eeprom_current_limit(void) {
     return eeprom_read_word(&eeprom_current_limit);
 }
-unsigned int read_eeprom_voltage(void) {
+uint16_t read_eeprom_voltage(void) {
     return eeprom_read_word(&eeprom_voltage);
 }
 
@@ -321,8 +326,8 @@ int8_t read_encoder(int id) {
 
 // ENCODER 1, voltage
 ISR(PCINT0_vect) {
-    set_voltage(voltage + read_encoder(0));
-    add_timer_callback(10000, &save_eeprom_voltage, 1);
+    set_voltage(get_voltage() + read_encoder(0));
+    add_job(10000, &save_eeprom_voltage, 1);
 }
 
 // ENCODER 1 SWITCH
@@ -333,8 +338,8 @@ ISR(INT0_vect) {
 // ENCODER 2, current limit
 ISR(PCINT2_vect) {
     set_current_limit(get_current_limit() + (5 * read_encoder(1)) / 2);
-    add_timer_callback(2000, &return_previous_mode, 1);
-    add_timer_callback(10000, &save_eeprom_current_limit, 1);
+    add_job(2000, &return_previous_mode, 1);
+    add_job(10000, &save_eeprom_current_limit, 1);
     set_mode(DISP_MODE_CURRENT_SET);
 }
 
@@ -355,14 +360,14 @@ volatile char sending_word;
  * MOSI PB3
  * SCK  PB5
  */
-void spi_init(void) {
+void init_spi(void) {
     DDRB |= _BV(DDB2) | _BV(DDB3) | _BV(DDB5); // SS, MOSI, SCK | output
     SPCR |= _BV(SPE) | _BV(SPIE) | _BV(MSTR) | _BV(CPOL) | _BV(DORD);
     SPSR |= _BV(SPI2X);
     sending_word = 0;
 }
 
-void spi_send(char cData) {
+void spi_send(uint8_t cData) {
     spi_begin();
     SPDR = cData;
 }
@@ -372,7 +377,7 @@ void spi_send_word(uint16_t word) {
     sending_word = 1;
     // LSB first
     SPDR = (0x00FF & word);
-    while (sending_word); // keskeytys nollaa
+    while (sending_word); // SPI interrupt decrements
     SPDR = (word >> 8);
 }
 

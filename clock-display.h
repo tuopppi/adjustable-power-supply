@@ -29,7 +29,7 @@
 #include "mode.h"
 
 /* This function should be called at program startup */
-void display_init(void);
+void init_display(void);
 
 unsigned int get_display_readout(void);
 void toggle_dots(void);

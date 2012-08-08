@@ -37,7 +37,7 @@ char get_mode(void);
 void set_current_limit(unsigned int limit);
 unsigned int get_current_limit(void);
 
-void zero_output_over_current(void);
+void limit_current(void);
 unsigned int in_current_limit_mode();
 
 #endif /* MODE_H_ */

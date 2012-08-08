@@ -74,7 +74,8 @@ uint16_t display_data[35][2] = {
     { 0b0000000000000000, 0b0000000000000110 }, // DOTS
 };
 
-void display_init(void) {
+void init_display(void) {
+    init_spi();
     TCCR0B |= _BV(CS01); // Timer 0 | clk_IO/8 (From prescaler)
     TIMSK0 |= _BV(TOIE0); // interrupt on timer 0 overflow
     seq_nbr = 0;
@@ -132,10 +133,10 @@ uint16_t get_readout_segments(unsigned int seq) {
 ISR(TIMER0_OVF_vect, ISR_NOBLOCK) {
     switch(get_mode()) {
     case DISP_MODE_VOLTAGE:
-        set_display_readout(voltage);
+        set_display_readout(get_voltage());
         break;
     case DISP_MODE_CURRENT:
-        set_display_readout(cur_avg_calculated);
+        set_display_readout(measured_current);
         break;
     case DISP_MODE_CURRENT_SET:
         set_display_readout(get_current_limit());

@@ -68,7 +68,7 @@ unsigned int in_current_limit_mode() {
     return current_limit_status;
 }
 
-void zero_output_over_current(void) {
+void limit_current(void) {
     current_limit_status = (current_limit_status << 1) + 1;
     OCR1A = 0;
 }

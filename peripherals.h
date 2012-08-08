@@ -25,50 +25,48 @@
 
 #include <inttypes.h>
 
-/* IO */
-#define enable_output() PORTC &= ~(_BV(PORTC2));
-#define disable_output() PORTC |= _BV(PORTC2);
+/* IO  ---------------------------------------------------------------------- */
 #define enable_miniload() PORTC |= _BV(PORTC1);
 #define disable_miniload() PORTC &= ~(_BV(PORTC1));
 void init_io(void);
 
-/* ADC */
-volatile unsigned int adc_reference;
-volatile unsigned int cur_avg_calculated; // mA
-void calc_current_average(void);
+/* ADC  --------------------------------------------------------------------- */
+volatile uint16_t measured_current; // mA
 void init_adc();
+void measure_current(void);
 
-/* EEPROM */
+/* EEPROM ------------------------------------------------------------------- */
 void save_eeprom_current_limit(void);
 void save_eeprom_voltage(void);
-unsigned int read_eeprom_current_limit(void);
-unsigned int read_eeprom_voltage(void);
+uint16_t read_eeprom_current_limit(void);
+uint16_t read_eeprom_voltage(void);
 
-/* ENCODERS */
+/* ENCODERS  ---------------------------------------------------------------- */
 void init_encoders(void);
 
-/* Voltage PWM, TIMER1 */
-volatile unsigned int voltage;
-void init_16_bit_pwm(void);
-void set_voltage(unsigned int set_voltage);
-unsigned int get_voltage();
+/* Voltage PWM  ------------------------------------------------------------- */
+void init_voltage_pwm(void);
+void set_voltage(uint16_t set_voltage);
+uint16_t get_voltage();
 
-/* Timer with call back function, TIMER2 */
-void init_delay_timer(void);
 
-/* Set timer for callback function
- * returns 1 on success, otherwise 0 */
-uint8_t add_timer_callback(uint16_t ms, void (*callback)(void), uint8_t replace);
-
-/*
- * SPI
+/* Job timer  ------------------------------------------------------------------
  *
- * SPI module is used to communicate with two 74HC595 sift registers
+ * Set timer for callback function
+ * returns 1 on success, otherwise 0
  *
+ * ms - time to wait before executing callback
+ * callback - pointer to function returning void and taking no params
+ * replace - boolean if this job should replace previously added job which
+ *           hasn't been executed yet
  */
+uint8_t add_job(uint16_t ms, void (*callback)(void), uint8_t replace);
 
-void spi_init(void);
-void spi_send(char cData);
+/* SPI  ------------------------------------------------------------------------
+ * used to communicate with two 74HC595 sift registers
+ */
+void init_spi(void);
+void spi_send(uint8_t cData);
 void spi_send_word(uint16_t word);
 
 #endif /* PERIPHERALS_H_ */
