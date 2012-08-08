@@ -1,8 +1,23 @@
 /*
  * peripherals.c
  *
- *  Created on: 25.6.2012
- *      Author: Tuomas
+ * Author: Tuomas Vaherkoski <tuomasvaherkoski@gmail.com>
+ *
+ * This file is part of variable-power-supply-oshw-project.
+ *
+ * This program free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
  */
 
 #include "peripherals.h"
@@ -12,6 +27,7 @@
 #include <inttypes.h>
 #include <avr/io.h>
 #include <stdlib.h>
+#include <avr/eeprom.h>
 
 /* IO */
 
@@ -41,7 +57,7 @@ void init_16_bit_pwm(void) {
     TCCR1B |= _BV(WGM12) | _BV(WGM13);
 
     ICR1 = 1000;
-    set_voltage(STARTUP_VOLTAGE);
+    set_voltage(read_eeprom_voltage());
 
     // start
     TCCR1B |= _BV(CS10);
@@ -84,7 +100,18 @@ void init_delay_timer(void) {
     TCCR2B |= _BV(CS22) | _BV(CS21) | _BV(CS20); // clk/1024
 }
 
-uint8_t add_timer_callback(uint16_t ms, void (*callback)(void)) {
+uint8_t add_timer_callback(uint16_t ms, void (*callback)(void), uint8_t replace) {
+    job* loop_p;
+    if(replace) {
+        loop_p = first_job_p;
+        while(loop_p != NULL) {
+            if(loop_p->callback == callback && loop_p->timeout > 0) {
+                loop_p->timeout = ms;
+                return 1;
+            }
+            loop_p = (job*)loop_p->next;
+        }
+    }
 
     job* new_job_p = malloc(sizeof(job));
     if(new_job_p != NULL) {
@@ -99,7 +126,7 @@ uint8_t add_timer_callback(uint16_t ms, void (*callback)(void)) {
         new_job_p->prev = NULL;
         first_job_p = new_job_p;
     } else {
-        job* loop_p = first_job_p;
+        loop_p = first_job_p;
         while(loop_p->next != NULL) {
             loop_p = loop_p->next;
         }
@@ -158,8 +185,8 @@ ISR(TIMER2_COMPA_vect) {
 
 /* ADC */
 
-#define ADCREF11 1100.0
-#define ADCREFVCC 5000.0
+#define ADCREF11 1100
+#define ADCREFVCC 5000
 #define ADCREFINIT ADCREF11
 
 #define AVERAGES 10
@@ -186,7 +213,7 @@ void init_adc(void) {
  * Sense resistor = 0.22ohm
  */
 void calc_current_average(void) {
-    float avg = 0.0;
+    unsigned long avg = 0;
     unsigned int i = 0;
     for(;i<AVERAGES;i++) {
         avg += (cur_avg[i]);
@@ -194,8 +221,8 @@ void calc_current_average(void) {
 
     // tweak last multiplier to show correct current...
     // ((x*1100)/1024))/(0.25*10.08)
-    avg = ((avg/AVERAGES) * adc_reference) / 1024.0;
-    cur_avg_calculated = 0.421277 * avg;
+    avg = ((avg/AVERAGES) * adc_reference) / 1024;
+    cur_avg_calculated = (421277 * avg)/1000000;
 
     if(adc_reference < ADCREFVCC && cur_avg_calculated > 450) {
         adc_reference = ADCREFVCC;
@@ -223,6 +250,22 @@ ISR(ADC_vect) {
     }
 
     ADCSRA |= _BV(ADSC); // start new conversion
+}
+
+/* EEPROM */
+uint16_t EEMEM eeprom_voltage;
+uint16_t EEMEM eeprom_current_limit;
+void save_eeprom_current_limit(void) {
+    eeprom_update_word(&eeprom_current_limit, get_current_limit());
+}
+void save_eeprom_voltage(void) {
+    eeprom_update_word(&eeprom_voltage, get_voltage());
+}
+unsigned int read_eeprom_current_limit(void) {
+    return eeprom_read_word(&eeprom_current_limit);
+}
+unsigned int read_eeprom_voltage(void) {
+    return eeprom_read_word(&eeprom_voltage);
 }
 
 /* ENCODERS */
@@ -279,6 +322,7 @@ int8_t read_encoder(int id) {
 // ENCODER 1, voltage
 ISR(PCINT0_vect) {
     set_voltage(voltage + read_encoder(0));
+    add_timer_callback(10000, &save_eeprom_voltage, 1);
 }
 
 // ENCODER 1 SWITCH
@@ -289,9 +333,8 @@ ISR(INT0_vect) {
 // ENCODER 2, current limit
 ISR(PCINT2_vect) {
     set_current_limit(get_current_limit() + (5 * read_encoder(1)) / 2);
-    if(!add_timer_callback(2000, &return_previous_mode)) {
-        test_function();
-    }
+    add_timer_callback(2000, &return_previous_mode, 1);
+    add_timer_callback(10000, &save_eeprom_current_limit, 1);
     set_mode(DISP_MODE_CURRENT_SET);
 }
 
@@ -301,6 +344,23 @@ ISR(INT1_vect) {
 }
 
 /* SPI */
+
+#define spi_begin() PORTB &= ~(_BV(PB2));
+#define spi_end() PORTB |= (_BV(PB2));
+
+volatile char sending_word;
+
+/*
+ * SS   PB2
+ * MOSI PB3
+ * SCK  PB5
+ */
+void spi_init(void) {
+    DDRB |= _BV(DDB2) | _BV(DDB3) | _BV(DDB5); // SS, MOSI, SCK | output
+    SPCR |= _BV(SPE) | _BV(SPIE) | _BV(MSTR) | _BV(CPOL) | _BV(DORD);
+    SPSR |= _BV(SPI2X);
+    sending_word = 0;
+}
 
 void spi_send(char cData) {
     spi_begin();
@@ -314,18 +374,6 @@ void spi_send_word(uint16_t word) {
     SPDR = (0x00FF & word);
     while (sending_word); // keskeytys nollaa
     SPDR = (word >> 8);
-}
-
-/*
- * SS   PB2
- * MOSI PB3
- * SCK  PB5
- */
-void spi_init(void) {
-    DDRB |= _BV(DDB2) | _BV(DDB3) | _BV(DDB5); // SS, MOSI, SCK | output
-    SPCR |= _BV(SPE) | _BV(SPIE) | _BV(MSTR) | _BV(CPOL) | _BV(DORD);
-    SPSR |= _BV(SPI2X);
-    sending_word = 0;
 }
 
 ISR(SPI_STC_vect) {

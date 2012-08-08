@@ -1,3 +1,25 @@
+/*
+ * clock-display.c
+ *
+ * Author: Tuomas Vaherkoski <tuomasvaherkoski@gmail.com>
+ *
+ * This file is part of variable-power-supply-oshw-project.
+ *
+ * This program free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include "clock-display.h"
@@ -14,7 +36,7 @@ volatile char blink;
 #define THOUSAND_OFFSET 30
 #define OL 33
 #define DOTS 34
-uint16_t display_data[36][2] = {
+uint16_t display_data[35][2] = {
     { 0b0000000000111001, 0b0000000001011010 }, // xxx0
     { 0b0000000000110001, 0b0000000000000000 }, // xxx1
     { 0b0000000000101001, 0b0000000001110010 }, // xxx2
