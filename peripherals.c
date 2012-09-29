@@ -100,6 +100,7 @@ void init_delay_timer(void) {
 }
 
 uint8_t add_job(uint16_t ms, void (*callback)(void), uint8_t replace) {
+    // check if timer is initialized
     if(OCR2A == 0) {
         init_delay_timer();
     }

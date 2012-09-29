@@ -86,12 +86,7 @@ void init_display(void) {
 }
 
 void display_blink(char bool) {
-    if(bool > 0) {
-        blink = 1;
-    }
-    else {
-        blink = 0;
-    }
+    blink = bool;
 }
 
 void set_display_readout(unsigned int data) {
@@ -146,7 +141,6 @@ ISR(TIMER0_OVF_vect, ISR_NOBLOCK) {
     }
 
     if (cycle_threshold > THRESHOLD_LIMIT) {
-
         // Jatketaan vasta kun spi moduuli on vapaa
         loop_until_bit_is_clear(SPSR, SPIF);
         static unsigned int blink_counter = 0;
