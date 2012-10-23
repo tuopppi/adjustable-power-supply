@@ -44,7 +44,7 @@ int main(void) {
         // result is saved to (unsigned int) measured_current
         measure_current();
 
-        if(measured_current < 20) {
+        if(measured_current < 10) {
             enable_miniload();
         } else {
             disable_miniload();

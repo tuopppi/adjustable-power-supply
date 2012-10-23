@@ -131,7 +131,7 @@ ISR(TIMER0_OVF_vect, ISR_NOBLOCK) {
         set_display_readout(get_voltage());
         break;
     case DISP_MODE_CURRENT:
-        set_display_readout(measured_current);
+        set_display_readout(display_current);
         break;
     case DISP_MODE_CURRENT_SET:
         set_display_readout(get_current_limit());

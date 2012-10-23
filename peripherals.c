@@ -202,7 +202,7 @@ void init_adc(void) {
     // 1.1V with external capacitor at AREF pin
     // select ADC3
     ADMUX |= _BV(REFS0) | _BV(REFS1) | _BV(MUX0) | _BV(MUX1);
-    // ADC-clk = 1MHz / 8 = 125kHz
+    // ADC-clk = 1MHz / 128 = 7812Hz
     ADCSRA |= _BV(ADEN) | _BV(ADSC) | _BV(ADIE) | _BV(ADPS0) | _BV(ADPS1) | _BV(ADPS2);
 
     int i = 0;
@@ -214,13 +214,13 @@ void init_adc(void) {
 }
 
 /*
- * Vref = 5V
  * Gain = 10
  * Sense resistor = 0.22ohm
  */
 void measure_current(void) {
     unsigned long avg = 0;
     unsigned int i = 0;
+
     for(;i<AVERAGES;i++) {
         avg += (cur_avg[i]);
     }
@@ -230,6 +230,18 @@ void measure_current(void) {
     avg = ((avg/AVERAGES) * adc_reference) / 1024;
     measured_current = (421277 * avg) / 1000000;
 
+    // determines how often display is updated
+    // smaller value means faster update
+    static uint16_t display_update = 0;
+    if(display_update > 600) {
+        display_current = measured_current;
+        display_update = 0;
+    }
+    display_update++;
+
+    // select Vref of ADC
+    // 1.1V gives better resolution in lower currents (1mA)
+    // 5V reference gives resolution of 4mA
     if(adc_reference < ADCREFVCC && measured_current > 450) {
         adc_reference = ADCREFVCC;
         ADMUX &= ~(_BV(REFS1));
