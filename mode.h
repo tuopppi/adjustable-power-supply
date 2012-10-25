@@ -24,14 +24,16 @@
 #define MODE_H_
 
 /* display modes */
-#define DISP_MODE_VOLTAGE 1
-#define DISP_MODE_CURRENT 2
-#define DISP_MODE_CURRENT_SET 3
-#define DISP_MODE_POWER 4
+typedef enum {
+    DISP_MODE_VOLTAGE,
+    DISP_MODE_CURRENT,
+    DISP_MODE_CURRENT_SET,
+    DISP_MODE_POWER,
+} State;
 
 void return_previous_mode(void);
-void set_mode(char mode);
-char get_mode(void);
+void set_mode(State mode);
+State get_mode(void);
 
 /* limits */
 void set_current_limit(unsigned int limit);

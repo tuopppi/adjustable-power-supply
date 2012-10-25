@@ -195,7 +195,7 @@ ISR(TIMER2_COMPA_vect) {
 #define ADCREFINIT ADCREF11
 
 #define AVERAGES 10
-volatile unsigned int cur_avg[AVERAGES]; // adc values (0-1024)
+volatile unsigned int cur_avg[AVERAGES]; // adc values (0-1023)
 volatile unsigned int adc_reference;
 
 void init_adc(void) {

@@ -32,7 +32,6 @@
 void init_display(void);
 
 unsigned int get_display_readout(void);
-void toggle_dots(void);
 void display_blink(char bool);
 
 #endif /* CLOCK_DISPLAY_H_ */

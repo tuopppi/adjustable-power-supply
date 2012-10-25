@@ -24,18 +24,19 @@
 #include "mode.h"
 #include <avr/io.h>
 
-char display_mode;
-char prev_display_mode;
+State display_mode;
+State prev_display_mode;
 
 /* display */
-void set_mode(char new_mode) {
-    if(new_mode >= 1 && new_mode <= 4 && new_mode != display_mode) {
-        prev_display_mode = display_mode;
-        display_mode = new_mode;
+void set_mode(State new_mode) {
+    if(display_mode == new_mode) {
+        return;
     }
+    prev_display_mode = display_mode;
+    display_mode = new_mode;
 }
 
-char get_mode() {
+State get_mode() {
     return display_mode;
 }
 
@@ -70,5 +71,7 @@ unsigned int in_current_limit_mode() {
 
 void limit_current(void) {
     current_limit_status = (current_limit_status << 1) + 1;
+
+    // set PWM output => 0
     OCR1A = 0;
 }
