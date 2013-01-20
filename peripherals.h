@@ -25,12 +25,6 @@
 
 #include <inttypes.h>
 
-/* IO  ---------------------------------------------------------------------- */
-#define enable_miniload() (PORTC |= _BV(PORTC1))
-#define disable_miniload() (PORTC &= ~(_BV(PORTC1)))
-#define miniload_enabled() (bit_is_set(PORTC, PORTC1))
-void init_io(void);
-
 /* ADC  --------------------------------------------------------------------- */
 volatile uint16_t measured_current; // mA
 volatile uint16_t display_current;

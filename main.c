@@ -29,7 +29,6 @@ void initialize(void) {
     set_mode(DISP_MODE_VOLTAGE);
     set_current_limit(read_eeprom_current_limit());
 
-    init_io();
     init_voltage_pwm();
     init_display();
     init_encoders();
@@ -42,16 +41,9 @@ int main(void) {
 
     while (1) {
         // result is saved to (unsigned int) measured_current
+
         measure_current();
 
-        if(measured_current > 14 && miniload_enabled()) {
-            disable_miniload();
-        }
-        else if(measured_current < 14 && !miniload_enabled()) {
-            enable_miniload();
-        } else {
-
-        }
 
         if(get_current_limit() > measured_current) {
             set_voltage(get_voltage());
@@ -60,6 +52,7 @@ int main(void) {
         }
 
         display_blink(in_current_limit_mode());
+
     }
 
     return 1;

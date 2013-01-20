@@ -36,7 +36,8 @@ volatile char blink;
 #define THOUSAND_OFFSET 30
 #define OL 33
 #define DOTS 34
-uint16_t display_data[35][2] = {
+#define CUR 35
+uint16_t display_data[36][2] = {
     { 0b0000000000111001, 0b0000000001011010 }, // xxx0
     { 0b0000000000110001, 0b0000000000000000 }, // xxx1
     { 0b0000000000101001, 0b0000000001110010 }, // xxx2
@@ -72,6 +73,7 @@ uint16_t display_data[35][2] = {
     { 0b1100000000000001, 0b1000000000000010 }, // 2xxx
     { 0b0000001011000001, 0b0000001111011010 }, // OL
     { 0b0000000000000000, 0b0000000000000110 }, // DOTS
+    { 0b0000000011000001, 0b0011100011100010 }, // cur
 };
 
 void init_display(void) {
@@ -97,9 +99,16 @@ unsigned int get_display_readout(void) {
     return readout;
 }
 
-void test_function(void) {
+void display_dots(void) {
     show_dots ^= 1;
 }
+
+enum special_indexes {
+    cur = 3000,
+    vol = 4000,
+    pwr = 5000,
+    ol = 6000
+};
 
 uint16_t get_readout_segments(unsigned int seq) {
     if (readout < 3000 && readout >= 0) {
@@ -115,9 +124,21 @@ uint16_t get_readout_segments(unsigned int seq) {
         }
         return segments;
     } else {
-        return display_data[OL][seq];
+        switch(readout) {
+        case cur:
+            return display_data[CUR][seq];
+        case vol:
+            return display_data[CUR][seq];
+        case pwr:
+            return display_data[CUR][seq];
+        case ol:
+            return display_data[CUR][seq];
+        default:
+            return display_data[OL][seq];
+        }
     }
 }
+
 
 /*                                      IO_clk
  * treshold_limit =  -------------------------------------------- - 1
@@ -135,6 +156,9 @@ ISR(TIMER0_OVF_vect, ISR_NOBLOCK) {
         break;
     case DISP_MODE_CURRENT_SET:
         set_display_readout(get_current_limit());
+        break;
+    case DISP_MODE_POWER:
+        set_display_readout(cur);
         break;
     default:
         break;

@@ -29,11 +29,6 @@
 #include <stdlib.h>
 #include <avr/eeprom.h>
 
-/* IO */
-void init_io(void) {
-    DDRC |= _BV(DDC1); // constant current sink control signal, output
-}
-
 /* PWM */
 volatile uint16_t voltage;
 
@@ -56,7 +51,8 @@ void init_voltage_pwm(void) {
     TCCR1B |= _BV(WGM12) | _BV(WGM13);
 
     ICR1 = 1000;
-    set_voltage(read_eeprom_voltage());
+    //set_voltage(read_eeprom_voltage());
+    set_voltage(500);
 
     // start
     TCCR1B |= _BV(CS10);
@@ -194,46 +190,34 @@ ISR(TIMER2_COMPA_vect) {
 #define ADCREFVCC 5000
 #define ADCREFINIT ADCREF11
 
-#define AVERAGES 10
-volatile unsigned int cur_avg[AVERAGES]; // adc values (0-1023)
+volatile unsigned int current; // adc values (0-1023)
 volatile unsigned int adc_reference;
 
 void init_adc(void) {
     // 1.1V with external capacitor at AREF pin
-    // select ADC3
-    ADMUX |= _BV(REFS0) | _BV(REFS1) | _BV(MUX0) | _BV(MUX1);
+    // select ADC0
+    ADMUX |= _BV(REFS0) | _BV(REFS1);
     // ADC-clk = 1MHz / 128 = 7812Hz
     ADCSRA |= _BV(ADEN) | _BV(ADSC) | _BV(ADIE) | _BV(ADPS0) | _BV(ADPS1) | _BV(ADPS2);
 
-    int i = 0;
-    for(; i<AVERAGES;i++) {
-        cur_avg[i] = 0;
-    }
     measured_current = 0;
     adc_reference = ADCREFINIT;
 }
 
 /*
- * Gain = 10
- * Sense resistor = 0.22ohm
+ * Gain = 13
+ * Rsense = 0.22ohm
+ * Vin = ADC * 1024 / Vref
+ * current = Vin / Gain / Rsense
  */
 void measure_current(void) {
-    unsigned long avg = 0;
-    unsigned int i = 0;
-
-    for(;i<AVERAGES;i++) {
-        avg += (cur_avg[i]);
-    }
-
-    // tweak last multiplier to show correct current...
-    // ((x*1100)/1024))/(0.25*10.08)
-    avg = ((avg/AVERAGES) * adc_reference) / 1024;
-    measured_current = (421277 * avg) / 1000000;
+    uint32_t scale = (uint32_t)current * adc_reference * 100 / 1024 / 13 / 22;
+    measured_current = (uint16_t)scale;
 
     // determines how often display is updated
     // smaller value means faster update
     static uint16_t display_update = 0;
-    if(display_update > 600) {
+    if(display_update > 10000) {
         display_current = measured_current;
         display_update = 0;
     }
@@ -242,10 +226,10 @@ void measure_current(void) {
     // select Vref of ADC
     // 1.1V gives better resolution in lower currents (1mA)
     // 5V reference gives resolution of 4mA
-    if(adc_reference < ADCREFVCC && measured_current > 450) {
+    if(adc_reference < ADCREFVCC && measured_current > 490) {
         adc_reference = ADCREFVCC;
         ADMUX &= ~(_BV(REFS1));
-    } else if ( adc_reference > ADCREF11  && measured_current < 430) {
+    } else if ( adc_reference > ADCREF11  && measured_current < 470) {
         adc_reference = ADCREF11;
         ADMUX |= _BV(REFS1);
     }
@@ -253,16 +237,10 @@ void measure_current(void) {
 }
 
 ISR(ADC_vect) {
-    static unsigned int curIndx = 0;
     static float adc_reference_prev = ADCREFINIT;
     // if reference changes, discard adc result
     if(adc_reference_prev == adc_reference) {
-        cur_avg[curIndx] = ADC;
-        if(curIndx < AVERAGES - 1) {
-            curIndx++;
-        } else {
-            curIndx = 0;
-        }
+        current = ADC;
     } else {
         adc_reference_prev = adc_reference;
     }
@@ -289,94 +267,109 @@ uint16_t read_eeprom_voltage(void) {
 /* ENCODERS */
 
 /*
- * ENCODER 1 (oikea)
- * PB6 - ENC1 B
- * PB7 - ENC1 A
- * PD2 - ENC1 SW
+ * ENCODERs
+ * PB6 - ENC1 A
+ * PB7 - ENC2 A
+ * PD5 - ENC1 B
+ * PD6 - ENC2 B
+
  *
- * ENCODER 2 (vasen)
- *
- * PD5 - ENC2 B
- * PD6 - ENC2 A
- * PD3 - ENC2 SW
+ * PD4 - TACTILE SW
+ * PD3 - ENC SW
+ * PD2 - ENC SW
  *
  */
 void init_encoders(void) {
     // pull-ups
     PORTB |= _BV(PORTB6) | _BV(PORTB7);
-    PORTD |= _BV(PORTD2) | _BV(PORTD3) | _BV(PORTD5) | _BV(PORTD6);
+    PORTD |= _BV(PORTD2) | _BV(PORTD3) |_BV(PORTD4) | _BV(PORTD5) | _BV(PORTD6);
     // Pin change interrupts
     PCMSK0 |= _BV(PCINT6) | _BV(PCINT7);
-    PCMSK2 |= _BV(PCINT21) | _BV(PCINT22);
+    PCMSK2 |= _BV(PCINT20);
     PCICR |= _BV(PCIE0) | _BV(PCIE2);
     // ext interrupts (INT0, INT1), falling edge
     EICRA |= _BV(ISC11) | _BV(ISC01);
     EIMSK |= _BV(INT0) | _BV(INT1);
 }
 
-#define enc1_phase() ((PINB & (_BV(PINB7) | _BV(PINB6))) >> 6)
-#define enc1_SW() (PIND & _BV(PIND2))
-#define enc2_phase() ((PIND & (_BV(PIND5) | _BV(PIND6))) >> 5)
-#define enc2_SW() (PIND & _BV(PIND3))
+enum encoderid {
+    ENC_CURRENT = 1,
+    ENC_VOLTAGE = 2
+};
 
-/* http://hifiduino.wordpress.com/2010/10/20/rotaryencoder-hw-sw-no-debounce */
 int8_t read_encoder(int id) {
-    // tarkista validi id
-    if (id >= 2) {
-        return 0;
+    uint8_t direction = (PIND & (_BV(PIND5) | _BV(PIND6))) >> 5;
+
+    if(id == ENC_CURRENT) {
+        if(direction == 1) { return -1; }
+        else if(direction == 3) { return 1; }
     }
-    int8_t enc_states[] = { 0, 1, -1, 0, -1, 0, 0, 1, 1, 0, 0, -1, 0, -1, 1, 0 };
-    static uint8_t old_AB[2] = { 0, 0 };
-    /**/
-    old_AB[id] <<= 2; //remember previous state
-    if (id == 0) {
-        old_AB[id] |= enc1_phase(); //add current state
-    } else if (id == 1) {
-        old_AB[id] |= enc2_phase(); //add current state
+    else if(id == ENC_VOLTAGE) {
+        if(direction == 3) { return -1; }
+        else if(direction == 2) { return 1; }
     }
-    return (enc_states[(old_AB[id] & 0x0f)]);
+
+    return 0;
 }
 
-// ENCODER 1, voltage
+
+
 ISR(PCINT0_vect) {
-    set_voltage(get_voltage() + read_encoder(0));
-    add_job(10000, &save_eeprom_voltage, 1);
+    // tarkistetaanko tuliko keskeytys ENCA vai ENCB
+    int8_t trigger = (PINB & (_BV(PINB7) | _BV(PINB6))) >> 6;
+
+    if( trigger == ENC_VOLTAGE) {
+        set_voltage(get_voltage() + read_encoder(ENC_VOLTAGE) * 5);
+        add_job(10000, &save_eeprom_voltage, 1);
+    }
+
+    if( trigger == ENC_CURRENT) {
+        set_mode(DISP_MODE_CURRENT_SET);
+        set_current_limit(get_current_limit() + read_encoder(ENC_CURRENT) * 10);
+        add_job(2000, &return_previous_mode, 1);
+        add_job(10000, &save_eeprom_current_limit, 1);
+    }
 }
 
-// ENCODER 1 SWITCH
+// ENC_VOLTAGE SWITCH
 ISR(INT0_vect) {
     set_mode(DISP_MODE_VOLTAGE);
 }
 
-// ENCODER 2, current limit
+// TACTILE SWITCH
 ISR(PCINT2_vect) {
-    set_current_limit(get_current_limit() + (5 * read_encoder(1)) / 2);
-    add_job(2000, &return_previous_mode, 1);
-    add_job(10000, &save_eeprom_current_limit, 1);
-    set_mode(DISP_MODE_CURRENT_SET);
+    uint8_t trigger = (PIND & _BV(PIND4)) >> 4;
+    if(!trigger) {
+        set_mode(DISP_MODE_CURRENT);
+        set_mode(DISP_MODE_POWER);
+        add_job(1000, &return_previous_mode, 1);
+    }
 }
 
-// ENCODER 2 SWITCH
+// ENC_CURRENT SWITCH
 ISR(INT1_vect) {
     set_mode(DISP_MODE_CURRENT);
+
 }
 
 /* SPI */
 
-#define spi_begin() PORTB &= ~(_BV(PB2));
-#define spi_end() PORTB |= (_BV(PB2));
+#define spi_begin() PORTC &= ~(_BV(PC5));
+#define spi_end() PORTC |= (_BV(PC5));
 
 volatile char sending_word;
 
 /*
- * SS   PB2
+ * RCK   PC5
  * MOSI PB3
  * SCK  PB5
  */
 void init_spi(void) {
+    // SS (PB2) pitää olla output SPI väylän oikean toiminnan varmistamiseksi
     DDRB |= _BV(DDB2) | _BV(DDB3) | _BV(DDB5); // SS, MOSI, SCK | output
+    DDRC |= _BV(DDC5);
     SPCR |= _BV(SPE) | _BV(SPIE) | _BV(MSTR) | _BV(CPOL) | _BV(DORD);
-    SPSR |= _BV(SPI2X);
+    //SPSR |= _BV(SPI2X);
     sending_word = 0;
 }
 
