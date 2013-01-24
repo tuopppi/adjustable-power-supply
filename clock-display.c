@@ -24,6 +24,7 @@
 #include <avr/io.h>
 #include "clock-display.h"
 #include "peripherals.h"
+#include "eventqueue.h"
 
 volatile char cycle_threshold;
 volatile unsigned int seq_nbr;
@@ -146,7 +147,8 @@ uint16_t get_readout_segments(unsigned int seq) {
  */
 #define THRESHOLD_LIMIT 10
 
-ISR(TIMER0_OVF_vect, ISR_NOBLOCK) {
+
+void display_handler(uint16_t btn_id) {
     switch(get_mode()) {
     case DISP_MODE_VOLTAGE:
         set_display_readout(get_voltage());
@@ -181,4 +183,8 @@ ISR(TIMER0_OVF_vect, ISR_NOBLOCK) {
         cycle_threshold = 0;
     }
     cycle_threshold++;
+}
+
+ISR(TIMER0_OVF_vect) {
+    evq_push(display_handler, 0);
 }

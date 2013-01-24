@@ -28,6 +28,7 @@
 #include <avr/io.h>
 #include <stdlib.h>
 #include <avr/eeprom.h>
+#include "eventqueue.h"
 
 /* PWM */
 volatile uint16_t voltage;
@@ -266,6 +267,40 @@ uint16_t read_eeprom_voltage(void) {
 
 /* ENCODERS */
 
+enum usr_input_events {
+    VOLTAGE_LEFT,
+    VOLTAGE_RIGHT,
+    CURRENT_LEFT,
+    CURRENT_RIGHT,
+    VOLTAGE_BTN,
+    CURRENT_BTN,
+    TOP_BTN
+};
+
+void usr_input_handler(uint16_t usr_input) {
+    switch(usr_input) {
+    case VOLTAGE_LEFT:
+        break;
+    case VOLTAGE_RIGHT:
+        break;
+    case CURRENT_LEFT:
+        break;
+    case CURRENT_RIGHT:
+        break;
+    case VOLTAGE_BTN:
+        set_mode(DISP_MODE_VOLTAGE);
+        break;
+    case CURRENT_BTN:
+        set_mode(DISP_MODE_CURRENT);
+        break;
+    case TOP_BTN:
+        set_mode(DISP_MODE_CURRENT);
+        set_mode(DISP_MODE_POWER);
+        add_job(1000, &return_previous_mode, 1);
+        break;
+    }
+}
+
 /*
  * ENCODERs
  * PB6 - ENC1 A
@@ -312,8 +347,6 @@ int8_t read_encoder(int id) {
     return 0;
 }
 
-
-
 ISR(PCINT0_vect) {
     // tarkistetaanko tuliko keskeytys ENCA vai ENCB
     int8_t trigger = (PINB & (_BV(PINB7) | _BV(PINB6))) >> 6;
@@ -333,23 +366,19 @@ ISR(PCINT0_vect) {
 
 // ENC_VOLTAGE SWITCH
 ISR(INT0_vect) {
-    set_mode(DISP_MODE_VOLTAGE);
-}
-
-// TACTILE SWITCH
-ISR(PCINT2_vect) {
-    uint8_t trigger = (PIND & _BV(PIND4)) >> 4;
-    if(!trigger) {
-        set_mode(DISP_MODE_CURRENT);
-        set_mode(DISP_MODE_POWER);
-        add_job(1000, &return_previous_mode, 1);
-    }
+    evq_push(usr_input_handler, VOLTAGE_BTN);
 }
 
 // ENC_CURRENT SWITCH
 ISR(INT1_vect) {
-    set_mode(DISP_MODE_CURRENT);
+    evq_push(usr_input_handler, CURRENT_BTN);
+}
 
+// TACTILE SWITCH
+ISR(PCINT2_vect) {
+    if(!((PIND & _BV(PIND4)) >> 4)) {
+        evq_push(usr_input_handler, TOP_BTN);
+    }
 }
 
 /* SPI */
@@ -357,7 +386,7 @@ ISR(INT1_vect) {
 #define spi_begin() PORTC &= ~(_BV(PC5));
 #define spi_end() PORTC |= (_BV(PC5));
 
-volatile char sending_word;
+volatile uint16_t spi_data_word;
 
 /*
  * RCK   PC5
@@ -369,8 +398,8 @@ void init_spi(void) {
     DDRB |= _BV(DDB2) | _BV(DDB3) | _BV(DDB5); // SS, MOSI, SCK | output
     DDRC |= _BV(DDC5);
     SPCR |= _BV(SPE) | _BV(SPIE) | _BV(MSTR) | _BV(CPOL) | _BV(DORD);
-    //SPSR |= _BV(SPI2X);
-    sending_word = 0;
+    SPSR |= _BV(SPI2X);
+    spi_data_word = 0;
 }
 
 void spi_send(uint8_t cData) {
@@ -380,17 +409,17 @@ void spi_send(uint8_t cData) {
 
 void spi_send_word(uint16_t word) {
     spi_begin();
-    sending_word = 1;
+    spi_data_word = word;
     // LSB first
-    SPDR = (0x00FF & word);
-    while (sending_word); // SPI interrupt decrements
-    SPDR = (word >> 8);
+    SPDR = (0x00FF & spi_data_word);
 }
 
 ISR(SPI_STC_vect) {
-    if (sending_word > 0) {
-        sending_word--;
+    if (spi_data_word > 0) {
+        // there's still data, send MSB
+        SPDR = (spi_data_word >> 8);
+        spi_data_word = 0;
     } else {
-        spi_end();
+        spi_end(); // done
     }
 }

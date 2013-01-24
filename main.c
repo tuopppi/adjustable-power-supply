@@ -24,9 +24,11 @@
 #include "peripherals.h"
 #include "clock-display.h"
 #include "mode.h"
+#include "eventqueue.h"
 
 void initialize(void) {
     set_mode(DISP_MODE_VOLTAGE);
+
     set_current_limit(read_eeprom_current_limit());
 
     init_voltage_pwm();
@@ -40,18 +42,22 @@ int main(void) {
     sei();
 
     while (1) {
-        // result is saved to (unsigned int) measured_current
 
-        measure_current();
-
-
-        if(get_current_limit() > measured_current) {
-            set_voltage(get_voltage());
-        } else {
-            limit_current();
+        event* ep = evq_front();
+        if(ep != 0) {
+            if(ep->callback) {
+                ep->callback(ep->data);
+            }
+            evq_pop();
         }
 
-        display_blink(in_current_limit_mode());
+        // result is saved to (unsigned int) measured_current
+        // measure_current();
+        // if(get_current_limit() > measured_current) {
+        //    set_voltage(get_voltage());
+        // } else {
+        //     limit_current();
+        // }
 
     }
 
