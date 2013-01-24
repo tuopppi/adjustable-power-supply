@@ -26,37 +26,21 @@
 #include <inttypes.h>
 
 /* ADC  --------------------------------------------------------------------- */
-volatile uint16_t measured_current; // mA
-volatile uint16_t display_current;
+uint16_t display_current;
 void init_adc();
-void measure_current(void);
+void current_handeler(uint16_t current);
 
 /* EEPROM ------------------------------------------------------------------- */
-void save_eeprom_current_limit(void);
-void save_eeprom_voltage(void);
+void save_eeprom_current_limit(uint16_t current);
+void save_eeprom_voltage(uint16_t voltage);
 uint16_t read_eeprom_current_limit(void);
 uint16_t read_eeprom_voltage(void);
-
-/* ENCODERS  ---------------------------------------------------------------- */
-void init_encoders(void);
 
 /* Voltage PWM  ------------------------------------------------------------- */
 void init_voltage_pwm(void);
 void set_voltage(uint16_t set_voltage);
-uint16_t get_voltage();
+uint16_t* get_voltage();
 
-
-/* Job timer  ------------------------------------------------------------------
- *
- * Set timer for callback function
- * returns 1 on success, otherwise 0
- *
- * ms - time to wait before executing callback
- * callback - pointer to function returning void and taking no params
- * replace - boolean if this job should replace previously added job which
- *           hasn't been executed yet
- */
-uint8_t add_job(uint16_t ms, void (*callback)(void), uint8_t replace);
 
 /* SPI  ------------------------------------------------------------------------
  * used to communicate with two 74HC595 sift registers

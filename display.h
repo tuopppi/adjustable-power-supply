@@ -26,12 +26,16 @@
 #ifndef CLOCK_DISPLAY_H_
 #define CLOCK_DISPLAY_H_
 
+#include <inttypes.h>
 #include "mode.h"
 
 /* This function should be called at program startup */
 void init_display(void);
 
-unsigned int get_display_readout(void);
+uint16_t DISPLAY_CUR;
+
+void set_display_readout(uint16_t* readout);
+
 void display_blink(char bool);
 void display_dots(void);
 

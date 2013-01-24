@@ -22,19 +22,18 @@
 
 #include <avr/interrupt.h>
 #include "peripherals.h"
-#include "clock-display.h"
+#include "controls.h"
+#include "display.h"
 #include "mode.h"
 #include "eventqueue.h"
 
 void initialize(void) {
-    set_mode(DISP_MODE_VOLTAGE);
-
     set_current_limit(read_eeprom_current_limit());
-
     init_voltage_pwm();
     init_display();
-    init_encoders();
+    init_controls();
     init_adc();
+    init_evq_timer();
 }
 
 int main(void) {
@@ -50,14 +49,6 @@ int main(void) {
             }
             evq_pop();
         }
-
-        // result is saved to (unsigned int) measured_current
-        // measure_current();
-        // if(get_current_limit() > measured_current) {
-        //    set_voltage(get_voltage());
-        // } else {
-        //     limit_current();
-        // }
 
     }
 

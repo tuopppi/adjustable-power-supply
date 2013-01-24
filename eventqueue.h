@@ -17,4 +17,10 @@ event* evq_front();
 /* Removes the next element in the queue */
 void evq_pop();
 
+void init_evq_timer(void);
+
+void evq_timed_push(void (*callback)(uint16_t),
+                    uint16_t data,
+                    uint16_t waitms);
+
 #endif

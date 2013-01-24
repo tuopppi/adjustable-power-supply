@@ -22,13 +22,13 @@
 
 #include <avr/interrupt.h>
 #include <avr/io.h>
-#include "clock-display.h"
+#include "display.h"
 #include "peripherals.h"
 #include "eventqueue.h"
 
 volatile char cycle_threshold;
 volatile unsigned int seq_nbr;
-volatile unsigned int readout;
+volatile uint16_t* readout_p_;
 volatile char show_dots;
 volatile char blink;
 
@@ -83,41 +83,34 @@ void init_display(void) {
     TIMSK0 |= _BV(TOIE0); // interrupt on timer 0 overflow
     seq_nbr = 0;
     cycle_threshold = 0;
-    readout = 0;
+    readout_p_ = 0;
     show_dots = 0;
     blink = 0;
+
+    // special text
+    DISPLAY_CUR = 3000;
 }
 
 void display_blink(char bool) {
     blink = bool;
 }
 
-void set_display_readout(unsigned int data) {
-    readout = data;
-}
-
-unsigned int get_display_readout(void) {
-    return readout;
+void set_display_readout(uint16_t* readout) {
+    readout_p_ = readout;
 }
 
 void display_dots(void) {
     show_dots ^= 1;
 }
 
-enum special_indexes {
-    cur = 3000,
-    vol = 4000,
-    pwr = 5000,
-    ol = 6000
-};
-
 uint16_t get_readout_segments(unsigned int seq) {
-    if (readout < 3000 && readout >= 0) {
+    /* Display can show numerical values between 0 - 2999 */
+    if (*readout_p_ < 3000 && *readout_p_ >= 0) {
         uint16_t segments = 0;
-        int thousands = THOUSAND_OFFSET + (readout / 1000);
-        int hundreds = HUNDRED_OFFSET + (readout % 1000) / 100;
-        int tens = TENS_OFFSET + (readout % 100) / 10;
-        int ones = (readout % 10);
+        int thousands = THOUSAND_OFFSET + (*readout_p_ / 1000);
+        int hundreds = HUNDRED_OFFSET + (*readout_p_ % 1000) / 100;
+        int tens = TENS_OFFSET + (*readout_p_ % 100) / 10;
+        int ones = (*readout_p_ % 10);
         segments = display_data[thousands][seq] | display_data[hundreds][seq]
             | display_data[tens][seq] | display_data[ones][seq];
         if(show_dots) {
@@ -125,14 +118,9 @@ uint16_t get_readout_segments(unsigned int seq) {
         }
         return segments;
     } else {
-        switch(readout) {
-        case cur:
-            return display_data[CUR][seq];
-        case vol:
-            return display_data[CUR][seq];
-        case pwr:
-            return display_data[CUR][seq];
-        case ol:
+        /* Other values correspond to some special text string */
+        switch(*readout_p_) {
+        case 3000:
             return display_data[CUR][seq];
         default:
             return display_data[OL][seq];
@@ -149,23 +137,6 @@ uint16_t get_readout_segments(unsigned int seq) {
 
 
 void display_handler(uint16_t btn_id) {
-    switch(get_mode()) {
-    case DISP_MODE_VOLTAGE:
-        set_display_readout(get_voltage());
-        break;
-    case DISP_MODE_CURRENT:
-        set_display_readout(display_current);
-        break;
-    case DISP_MODE_CURRENT_SET:
-        set_display_readout(get_current_limit());
-        break;
-    case DISP_MODE_POWER:
-        set_display_readout(cur);
-        break;
-    default:
-        break;
-    }
-
     if (cycle_threshold > THRESHOLD_LIMIT) {
         // Jatketaan vasta kun spi moduuli on vapaa
         loop_until_bit_is_clear(SPSR, SPIF);

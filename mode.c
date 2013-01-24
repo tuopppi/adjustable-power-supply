@@ -20,15 +20,16 @@
  *
  */
 
-#include "clock-display.h"
+#include "display.h"
 #include "mode.h"
 #include <avr/io.h>
+#include <inttypes.h>
 
-State display_mode;
-State prev_display_mode;
+uint16_t display_mode;
+uint16_t prev_display_mode;
 
 /* display */
-void set_mode(State new_mode) {
+void set_mode(uint16_t new_mode) {
     if(display_mode == new_mode) {
         return;
     }
@@ -36,7 +37,7 @@ void set_mode(State new_mode) {
     display_mode = new_mode;
 }
 
-State get_mode() {
+uint16_t get_mode() {
     return display_mode;
 }
 
@@ -45,7 +46,7 @@ void return_previous_mode(void) {
 }
 
 /* limits */
-volatile unsigned int current_limit; // mA
+uint16_t current_limit; // mA
 
 void set_current_limit(unsigned int limit) {
     if(limit >= 10 && limit < 3000) {
@@ -57,8 +58,8 @@ void set_current_limit(unsigned int limit) {
     }
 }
 
-unsigned int get_current_limit(void) {
-    return current_limit;
+uint16_t* get_current_limit(void) {
+    return &current_limit;
 }
 
 static unsigned int current_limit_status = 0;
