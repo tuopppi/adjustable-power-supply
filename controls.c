@@ -14,9 +14,6 @@
 #include <avr/io.h>
 #include <inttypes.h>
 
-
-/* ENCODERS */
-
 enum usr_input_events {
     VOLTAGE_LEFT,
     VOLTAGE_RIGHT,
@@ -30,13 +27,13 @@ enum usr_input_events {
 void voltage_knob_handler(uint16_t usr_input) {
     switch(usr_input) {
         case VOLTAGE_LEFT:
-            set_voltage(*get_voltage() - 5);
+            evq_push(set_voltage, *get_voltage() - 5);
             set_display_readout(get_voltage());
             evq_push(save_eeprom_voltage, *get_voltage());
             break;
 
         case VOLTAGE_RIGHT:
-            set_voltage(*get_voltage() + 5);
+            evq_push(set_voltage, *get_voltage() + 5);
             set_display_readout(get_voltage());
             evq_push(save_eeprom_voltage, *get_voltage());
             break;
@@ -50,13 +47,13 @@ void voltage_knob_handler(uint16_t usr_input) {
 void current_knob_handler(uint16_t usr_input) {
     switch(usr_input) {
     case CURRENT_LEFT:
-        set_current_limit(*get_current_limit() - 10);
+        evq_push(set_current_limit, *get_current_limit() - 10);
         set_display_readout(get_current_limit());
         evq_push(save_eeprom_current_limit, *get_current_limit());
         break;
 
     case CURRENT_RIGHT:
-        set_current_limit(*get_current_limit() + 10);
+        evq_push(set_current_limit, *get_current_limit() + 10);
         set_display_readout(get_current_limit());
         evq_push(save_eeprom_current_limit, *get_current_limit());
         break;

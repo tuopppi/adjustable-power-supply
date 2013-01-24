@@ -3,21 +3,7 @@
  *
  * Author: Tuomas Vaherkoski <tuomasvaherkoski@gmail.com>
  *
- * This file is part of variable-power-supply-oshw-project.
- *
- * This program free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * This file is part of variable-power-supply project.
  */
 
 #ifndef MODE_H_
@@ -36,7 +22,7 @@ void set_mode(uint16_t mode);
 uint16_t get_mode(void);
 
 /* limits */
-void set_current_limit(unsigned int limit);
+void set_current_limit(uint16_t limit);
 uint16_t* get_current_limit(void);
 
 void limit_current(void);

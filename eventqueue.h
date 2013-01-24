@@ -1,3 +1,11 @@
+/*
+ * eventqueue.h
+ *
+ * Author: Tuomas Vaherkoski <tuomasvaherkoski@gmail.com>
+ *
+ * This file is part of variable-power-supply project.
+ */
+
 #ifndef EVENTQUEUE
 #define EVENTQUEUE
 

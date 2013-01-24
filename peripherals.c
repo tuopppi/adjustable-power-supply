@@ -3,21 +3,7 @@
  *
  * Author: Tuomas Vaherkoski <tuomasvaherkoski@gmail.com>
  *
- * This file is part of variable-power-supply-oshw-project.
- *
- * This program free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * This file is part of variable-power-supply project.
  */
 
 #include "peripherals.h"
@@ -52,8 +38,7 @@ void init_voltage_pwm(void) {
     TCCR1B |= _BV(WGM12) | _BV(WGM13);
 
     ICR1 = 1000;
-    //set_voltage(read_eeprom_voltage());
-    set_voltage(500);
+    evq_push(set_voltage, read_eeprom_voltage());
 
     // start
     TCCR1B |= _BV(CS10);
@@ -110,6 +95,12 @@ void init_adc(void) {
 void current_handeler(uint16_t current) {
     uint32_t scale = (uint32_t)current * adc_reference * 100 / 1024 / 13 / 22;
     current = (uint16_t)scale;
+
+    if(current > *get_current_limit()) {
+        limit_current();
+    } else {
+        evq_push(set_voltage, *get_voltage());
+    }
 
     // determines how often display is updated
     // smaller value means faster update

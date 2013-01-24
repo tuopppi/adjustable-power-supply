@@ -1,3 +1,11 @@
+/*
+ * eventqueue.c
+ *
+ * Author: Tuomas Vaherkoski <tuomasvaherkoski@gmail.com>
+ *
+ * This file is part of variable-power-supply project.
+ */
+
 #include <stdint.h>
 #include <avr/interrupt.h>
 #include <util/atomic.h>
