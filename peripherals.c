@@ -38,7 +38,7 @@ void init_voltage_pwm(void) {
     TCCR1B |= _BV(WGM12) | _BV(WGM13);
 
     ICR1 = 1000;
-    evq_push(set_voltage, read_eeprom_voltage());
+    set_voltage(read_eeprom_voltage());
 
     // start
     TCCR1B |= _BV(CS10);
@@ -99,7 +99,7 @@ void current_handeler(uint16_t current) {
     if(current > *get_current_limit()) {
         limit_current();
     } else {
-        evq_push(set_voltage, *get_voltage());
+        set_voltage(*get_voltage());
     }
 
     // determines how often display is updated
@@ -125,6 +125,9 @@ void current_handeler(uint16_t current) {
 }
 
 ISR(ADC_vect) {
+    /* ADC Conversion finished
+     * Result is saved to ADC register
+     */
     static float adc_reference_prev = ADCREFINIT;
     // if reference changes, discard adc result
     if(adc_reference_prev == adc_reference) {

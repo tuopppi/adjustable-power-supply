@@ -15,6 +15,7 @@
 #include <inttypes.h>
 
 enum usr_input_events {
+    UNKNOWN_INPUT,
     VOLTAGE_LEFT,
     VOLTAGE_RIGHT,
     CURRENT_LEFT,
@@ -24,73 +25,92 @@ enum usr_input_events {
     TOP_BTN
 };
 
+void set_and_save_voltage(int8_t diff) {
+    set_voltage(*get_voltage() + diff);
+    set_dynamic_readout(get_voltage());
+    evq_push(save_eeprom_voltage, *get_voltage());
+}
+
+#define VOLTAGE_CHANGE_PER_NOTCH 5
 void voltage_knob_handler(uint16_t usr_input) {
+    status_led_on(LED_VOLTAGE);
+    status_led_off(LED_CURRENT);
     switch(usr_input) {
         case VOLTAGE_LEFT:
-            evq_push(set_voltage, *get_voltage() - 5);
-            set_display_readout(get_voltage());
-            evq_push(save_eeprom_voltage, *get_voltage());
+            set_and_save_voltage(-VOLTAGE_CHANGE_PER_NOTCH);
             break;
 
         case VOLTAGE_RIGHT:
-            evq_push(set_voltage, *get_voltage() + 5);
-            set_display_readout(get_voltage());
-            evq_push(save_eeprom_voltage, *get_voltage());
+            set_and_save_voltage(VOLTAGE_CHANGE_PER_NOTCH);
             break;
 
         case VOLTAGE_BTN:
-            set_display_readout(get_voltage());
+            set_dynamic_readout(get_voltage());
             break;
     }
 }
 
+
+
+void set_and_save_current(int8_t diff) {
+    set_current_limit(*get_current_limit() + diff);
+    set_dynamic_readout(get_current_limit());
+    evq_push(save_eeprom_current_limit, *get_current_limit());
+}
+
+#define CURRENT_CHANGE_PER_NOTCH 10
 void current_knob_handler(uint16_t usr_input) {
+    status_led_on(LED_CURRENT);
+    status_led_off(LED_VOLTAGE);
     switch(usr_input) {
     case CURRENT_LEFT:
-        evq_push(set_current_limit, *get_current_limit() - 10);
-        set_display_readout(get_current_limit());
-        evq_push(save_eeprom_current_limit, *get_current_limit());
+        set_and_save_current(-CURRENT_CHANGE_PER_NOTCH);
         break;
 
     case CURRENT_RIGHT:
-        evq_push(set_current_limit, *get_current_limit() + 10);
-        set_display_readout(get_current_limit());
-        evq_push(save_eeprom_current_limit, *get_current_limit());
+        set_and_save_current(CURRENT_CHANGE_PER_NOTCH);
         break;
 
     case CURRENT_BTN:
-        set_display_readout(&display_current);
+        set_dynamic_readout(&display_current);
         break;
     }
 }
 
 void button_handler(uint16_t usr_input) {
-    switch(usr_input) {
-    case TOP_BTN:
-        break;
+    if(usr_input == TOP_BTN) {
+        set_static_readout(DISPLAY_CUR);
     }
 }
 
 /*
- * ENCODERs
- * PB6 - ENC1 A
- * PB7 - ENC2 A
- * PD5 - ENC1 B
- * PD6 - ENC2 B
-
+ * CONTROLS
  *
- * PD4 - TACTILE SW
- * PD3 - ENC SW
- * PD2 - ENC SW
+ * VOLTAGE
+ * =======
+ * ENC1 A - PD5 - PCINT21 - PCMSK2 -(sininen)
+ * ENC1 B - PB6 - (punainen)
+ * ENC1 S - PD2 - INT0
+ *
+ * CURRENT
+ * =======
+ * ENC2 A - PB7 - PCINT7 - PCMSK0 - (keltainen)
+ * ENC2 B - PD6 - (valkoinen)
+ * ENC2 S - PD3 - INT1
+
+ * TACTILE SW
+ * ==========
+ * PD4 - PCINT20 - PCMSK2
  *
  */
+
 void init_controls(void) {
     // pull-ups
     PORTB |= _BV(PORTB6) | _BV(PORTB7);
     PORTD |= _BV(PORTD2) | _BV(PORTD3) |_BV(PORTD4) | _BV(PORTD5) | _BV(PORTD6);
     // Pin change interrupts
-    PCMSK0 |= _BV(PCINT6) | _BV(PCINT7);
-    PCMSK2 |= _BV(PCINT20);
+    PCMSK0 |= _BV(PCINT7);
+    PCMSK2 |= _BV(PCINT21) | _BV(PCINT20);
     PCICR |= _BV(PCIE0) | _BV(PCIE2);
     // ext interrupts (INT0, INT1), falling edge
     EICRA |= _BV(ISC11) | _BV(ISC01);
@@ -98,36 +118,57 @@ void init_controls(void) {
 }
 
 enum encoderid {
-    ENC_CURRENT = 1,
-    ENC_VOLTAGE = 2
+    ENC_CURRENT = 0b01,
+    ENC_VOLTAGE = 0b10
 };
 
-uint16_t encoder_direction(int id) {
-    uint8_t direction = (PIND & (_BV(PIND5) | _BV(PIND6))) >> 5;
+uint16_t encoder_direction(uint8_t id) {
+    uint8_t direction;
+    switch(id) {
+    case ENC_CURRENT:
+        direction = PIND & _BV(PIND6);
+        if(direction) { return CURRENT_LEFT; }
+        else { return CURRENT_RIGHT; }
+        break;
 
-    if(id == ENC_CURRENT) {
-        if(direction == 1) { return CURRENT_LEFT; }
-        else if(direction == 3) { return CURRENT_RIGHT; }
+    case ENC_VOLTAGE:
+        direction = PINB & _BV(PINB6);
+        if(direction) { return VOLTAGE_LEFT; }
+        else { return VOLTAGE_RIGHT; }
+        break;
     }
-    else if(id == ENC_VOLTAGE) {
-        if(direction == 3) { return VOLTAGE_LEFT; }
-        else if(direction == 2) { return VOLTAGE_RIGHT; }
-    }
+    return UNKNOWN_INPUT;
 
-    return 0;
 }
 
 ISR(PCINT0_vect) {
-    // tarkistetaanko tuliko keskeytys ENCA vai ENCB
-    int8_t trigger = (PINB & (_BV(PINB7) | _BV(PINB6))) >> 6;
+    // ENC2 A
+    if(PINB & _BV(PINB7)) {
+        evq_push(current_knob_handler, encoder_direction(ENC_CURRENT));
+    }
+}
 
-    if(trigger == ENC_VOLTAGE) {
+ISR(PCINT2_vect) {
+    static uint8_t wait_for_btn_release = 0;
+
+    // TACTILE SW RELEASE
+    if(wait_for_btn_release) {
+        wait_for_btn_release = 0;
+        return;
+    }
+
+    // TACTILE SW PRESS
+    if((PIND & _BV(PIND4)) == 0) {
+        evq_push(button_handler, TOP_BTN);
+        wait_for_btn_release = 1;
+        return;
+    }
+
+    // ENC1 A
+    if(PIND & _BV(PIND5) ) {
         evq_push(voltage_knob_handler, encoder_direction(ENC_VOLTAGE));
     }
 
-    if(trigger == ENC_CURRENT) {
-        evq_push(current_knob_handler, encoder_direction(ENC_CURRENT));
-    }
 }
 
 ISR(INT0_vect) {
@@ -138,8 +179,4 @@ ISR(INT1_vect) {
     evq_push(current_knob_handler, CURRENT_BTN);
 }
 
-ISR(PCINT2_vect) {
-    if(!((PIND & _BV(PIND4)) >> 4)) {
-        evq_push(button_handler, TOP_BTN);
-    }
-}
+

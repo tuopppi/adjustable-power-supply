@@ -8,13 +8,15 @@
 
 #include <avr/interrupt.h>
 #include <avr/io.h>
+#include <inttypes.h>
 #include "display.h"
 #include "peripherals.h"
 #include "eventqueue.h"
 
 volatile char cycle_threshold;
 volatile unsigned int seq_nbr;
-volatile uint16_t* readout_p_;
+volatile uint16_t* dynamic_readout_p_;
+volatile uint16_t static_readout_;
 volatile char show_dots;
 volatile char blink;
 
@@ -69,20 +71,24 @@ void init_display(void) {
     TIMSK0 |= _BV(TOIE0); // interrupt on timer 0 overflow
     seq_nbr = 0;
     cycle_threshold = 0;
-    readout_p_ = 0;
+    dynamic_readout_p_ = 0;
     show_dots = 0;
     blink = 0;
 
-    // special text
-    DISPLAY_CUR = 3000;
+    DDRD |= _BV(PD0) + _BV(PD1); // LED_VOLTAGE, LED_CURRENT outputs
 }
 
 void display_blink(char bool) {
     blink = bool;
 }
 
-void set_display_readout(uint16_t* readout) {
-    readout_p_ = readout;
+void set_dynamic_readout(uint16_t* readout) {
+    dynamic_readout_p_ = readout;
+}
+
+void set_static_readout(uint16_t readout) {
+    static_readout_ = readout;
+    dynamic_readout_p_ = &static_readout_;
 }
 
 void display_dots(void) {
@@ -91,12 +97,12 @@ void display_dots(void) {
 
 uint16_t get_readout_segments(unsigned int seq) {
     /* Display can show numerical values between 0 - 2999 */
-    if (*readout_p_ < 3000 && *readout_p_ >= 0) {
+    if (*dynamic_readout_p_ < 3000 && *dynamic_readout_p_ >= 0) {
         uint16_t segments = 0;
-        int thousands = THOUSAND_OFFSET + (*readout_p_ / 1000);
-        int hundreds = HUNDRED_OFFSET + (*readout_p_ % 1000) / 100;
-        int tens = TENS_OFFSET + (*readout_p_ % 100) / 10;
-        int ones = (*readout_p_ % 10);
+        int thousands = THOUSAND_OFFSET + (*dynamic_readout_p_ / 1000);
+        int hundreds = HUNDRED_OFFSET + (*dynamic_readout_p_ % 1000) / 100;
+        int tens = TENS_OFFSET + (*dynamic_readout_p_ % 100) / 10;
+        int ones = (*dynamic_readout_p_ % 10);
         segments = display_data[thousands][seq] | display_data[hundreds][seq]
             | display_data[tens][seq] | display_data[ones][seq];
         if(show_dots) {
@@ -105,8 +111,8 @@ uint16_t get_readout_segments(unsigned int seq) {
         return segments;
     } else {
         /* Other values correspond to some special text string */
-        switch(*readout_p_) {
-        case 3000:
+        switch(*dynamic_readout_p_) {
+        case DISPLAY_CUR:
             return display_data[CUR][seq];
         default:
             return display_data[OL][seq];
@@ -140,8 +146,22 @@ void display_handler(uint16_t null) {
         cycle_threshold = 0;
     }
     cycle_threshold++;
+
+    //evq_timed_push(display_handler, 0, 8);
 }
 
 ISR(TIMER0_OVF_vect) {
     evq_push(display_handler, 0);
+}
+
+
+/* LEDs --------------------------------------------------------------------- */
+#define LEDPORT (PORTD)
+
+void status_led_on(uint8_t led) {
+    LEDPORT |= led;
+}
+
+void status_led_off(uint8_t led) {
+    LEDPORT &= ~(led);
 }

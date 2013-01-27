@@ -24,14 +24,19 @@ void initialize(void) {
 
 int main(void) {
     initialize();
-    sei();
 
+    set_dynamic_readout(get_voltage());
+    status_led_on(LED_VOLTAGE);
+
+    sei(); // enable interrupts
     while (1) {
 
         event* ep = evq_front();
         if(ep != 0) {
-            ep->callback(ep->data);
-            evq_pop();
+            if(ep->callback) {
+                ep->callback(ep->data);
+                evq_pop();
+            }
         }
 
     }
