@@ -144,15 +144,21 @@ ISR(ADC_vect) {
 /* EEPROM */
 uint16_t EEMEM eeprom_voltage = 125;
 uint16_t EEMEM eeprom_current_limit = 200;
+
 void save_eeprom_current_limit(uint16_t current) {
-    eeprom_update_word(&eeprom_current_limit, current);
+    eeprom_update_word(&eeprom_current_limit, *get_current_limit());
+    blink_led(LED_CURRENT, 200);
 }
+
 void save_eeprom_voltage(uint16_t voltage) {
-    eeprom_update_word(&eeprom_voltage, voltage);
+    eeprom_update_word(&eeprom_voltage, *get_voltage());
+    blink_led(LED_VOLTAGE, 200);
 }
+
 uint16_t read_eeprom_current_limit(void) {
     return eeprom_read_word(&eeprom_current_limit);
 }
+
 uint16_t read_eeprom_voltage(void) {
     return eeprom_read_word(&eeprom_voltage);
 }
@@ -165,9 +171,9 @@ uint16_t read_eeprom_voltage(void) {
 volatile uint16_t spi_data_word;
 
 /*
- * RCK   PC5
- * MOSI PB3
- * SCK  PB5
+ * MOSI - PB3
+ * SCK  - PB5
+ * RCK  - PC5
  */
 void init_spi(void) {
     // SS (PB2) pitää olla output SPI väylän oikean toiminnan varmistamiseksi
@@ -178,12 +184,8 @@ void init_spi(void) {
     spi_data_word = 0;
 }
 
-void spi_send(uint8_t cData) {
-    spi_begin();
-    SPDR = cData;
-}
-
 void spi_send_word(uint16_t word) {
+    loop_until_bit_is_clear(SPSR, SPIF);
     spi_begin();
     spi_data_word = word;
     // LSB first

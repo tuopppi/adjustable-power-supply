@@ -28,7 +28,7 @@ enum usr_input_events {
 void set_and_save_voltage(int8_t diff) {
     set_voltage(*get_voltage() + diff);
     set_dynamic_readout(get_voltage());
-    evq_push(save_eeprom_voltage, *get_voltage());
+    evq_timed_push(save_eeprom_voltage, 0, 3000);
 }
 
 #define VOLTAGE_CHANGE_PER_NOTCH 5
@@ -55,7 +55,7 @@ void voltage_knob_handler(uint16_t usr_input) {
 void set_and_save_current(int8_t diff) {
     set_current_limit(*get_current_limit() + diff);
     set_dynamic_readout(get_current_limit());
-    evq_push(save_eeprom_current_limit, *get_current_limit());
+    evq_timed_push(save_eeprom_current_limit, 0, 3000);
 }
 
 #define CURRENT_CHANGE_PER_NOTCH 10

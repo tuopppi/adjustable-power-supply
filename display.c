@@ -13,12 +13,13 @@
 #include "peripherals.h"
 #include "eventqueue.h"
 
-volatile char cycle_threshold;
-volatile unsigned int seq_nbr;
-volatile uint16_t* dynamic_readout_p_;
+volatile uint8_t seq_nbr;
+volatile uint16_t* readout_p_;
 volatile uint16_t static_readout_;
 volatile char show_dots;
-volatile char blink;
+
+uint16_t get_readout_segments(uint8_t);
+void display_handler(uint16_t);
 
 #define TENS_OFFSET 10
 #define HUNDRED_OFFSET 20
@@ -67,101 +68,93 @@ uint16_t display_data[36][2] = {
 
 void init_display(void) {
     init_spi();
-    TCCR0B |= _BV(CS01); // Timer 0 | clk_IO/8 (From prescaler)
-    TIMSK0 |= _BV(TOIE0); // interrupt on timer 0 overflow
-    seq_nbr = 0;
-    cycle_threshold = 0;
-    dynamic_readout_p_ = 0;
-    show_dots = 0;
-    blink = 0;
-
     DDRD |= _BV(PD0) + _BV(PD1); // LED_VOLTAGE, LED_CURRENT outputs
-}
 
-void display_blink(char bool) {
-    blink = bool;
+    seq_nbr = 0;
+    show_dots = 0;
+
+    set_static_readout(0);
+    evq_push(display_handler, 0); // start display
 }
 
 void set_dynamic_readout(uint16_t* readout) {
-    dynamic_readout_p_ = readout;
+    readout_p_ = readout;
 }
 
 void set_static_readout(uint16_t readout) {
     static_readout_ = readout;
-    dynamic_readout_p_ = &static_readout_;
+    readout_p_ = &static_readout_;
 }
 
 void display_dots(void) {
     show_dots ^= 1;
 }
 
-uint16_t get_readout_segments(unsigned int seq) {
+uint16_t get_readout_segments(uint8_t seq) {
     /* Display can show numerical values between 0 - 2999 */
-    if (*dynamic_readout_p_ < 3000 && *dynamic_readout_p_ >= 0) {
+    if (*readout_p_ < 3000 && *readout_p_ >= 0) {
         uint16_t segments = 0;
-        int thousands = THOUSAND_OFFSET + (*dynamic_readout_p_ / 1000);
-        int hundreds = HUNDRED_OFFSET + (*dynamic_readout_p_ % 1000) / 100;
-        int tens = TENS_OFFSET + (*dynamic_readout_p_ % 100) / 10;
-        int ones = (*dynamic_readout_p_ % 10);
-        segments = display_data[thousands][seq] | display_data[hundreds][seq]
-            | display_data[tens][seq] | display_data[ones][seq];
+        int thousands = THOUSAND_OFFSET + (*readout_p_ / 1000);
+        int hundreds = HUNDRED_OFFSET + (*readout_p_ % 1000) / 100;
+        int tens = TENS_OFFSET + (*readout_p_ % 100) / 10;
+        int ones = (*readout_p_ % 10);
+        segments = display_data[thousands][seq] |
+                   display_data[hundreds][seq]  |
+                   display_data[tens][seq]      |
+                   display_data[ones][seq];
+
         if(show_dots) {
             segments |= display_data[DOTS][seq];
         }
         return segments;
     } else {
-        /* Other values correspond to some special text string */
-        switch(*dynamic_readout_p_) {
+        /* Other values mapped to special text strings */
+        switch(*readout_p_) {
         case DISPLAY_CUR:
             return display_data[CUR][seq];
         default:
-            return display_data[OL][seq];
+            return 0;
         }
     }
 }
-
-
-/*                                      IO_clk
- * treshold_limit =  -------------------------------------------- - 1
- *                    refresh_freq * sequences * prescaler * 255
- */
-#define THRESHOLD_LIMIT 10
-
 
 void display_handler(uint16_t null) {
-    if (cycle_threshold > THRESHOLD_LIMIT) {
-        // Jatketaan vasta kun spi moduuli on vapaa
-        loop_until_bit_is_clear(SPSR, SPIF);
-        static unsigned int blink_counter = 0;
+    spi_send_word(get_readout_segments(seq_nbr % 2));
+    seq_nbr++;
 
-        // valitaan piirrettävät segmentit
-        if(blink && blink_counter % 500 < 100) {
-            spi_send_word(0);
-        } else {
-            spi_send_word(get_readout_segments(seq_nbr % 2));
-        }
-
-        blink_counter++;
-        seq_nbr++;
-        cycle_threshold = 0;
-    }
-    cycle_threshold++;
-
-    //evq_timed_push(display_handler, 0, 8);
-}
-
-ISR(TIMER0_OVF_vect) {
-    evq_push(display_handler, 0);
+    // 100Hz refresh-rate
+    evq_timed_push(display_handler, 0, 10);
 }
 
 
 /* LEDs --------------------------------------------------------------------- */
+
 #define LEDPORT (PORTD)
 
-void status_led_on(uint8_t led) {
+uint8_t status_led_status(uint8_t led);
+
+void status_led_on(uint16_t led) {
     LEDPORT |= led;
 }
 
-void status_led_off(uint8_t led) {
+void status_led_off(uint16_t led) {
     LEDPORT &= ~(led);
+}
+
+void status_led_toggle(uint16_t led) {
+    LEDPORT ^= (led);
+}
+
+void blink_led(uint16_t led, uint16_t time) {
+    if(status_led_status(led)) {
+        status_led_off(led);
+        evq_timed_push(status_led_on, led, time);
+    } else {
+        status_led_on(led);
+        evq_timed_push(status_led_off, led, time);
+    }
+}
+
+uint8_t status_led_status(uint8_t led) {
+    return LEDPORT & (uint8_t)(led);
 }

@@ -10,6 +10,7 @@
 #include <avr/interrupt.h>
 #include <util/atomic.h>
 #include "eventqueue.h"
+#include "display.h"
 
 // FIFO - ring buffer
 #define BUFMAX 64
@@ -18,11 +19,11 @@ event ebuf_[BUFMAX];
 event *first_ = ebuf_;
 event *last_ = ebuf_;
 
-int8_t evq_push(void (*callback)(uint16_t), uint16_t data) {
+uint8_t evq_push(void (*callback)(uint16_t), uint16_t data) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         if(events_ >= BUFMAX) {
             // buffer is full
-            return -1;
+            return 0;
         }
 
         if(last_ >= ebuf_ + BUFMAX) {
@@ -35,7 +36,7 @@ int8_t evq_push(void (*callback)(uint16_t), uint16_t data) {
         last_++;
         events_++;
     }
-    return 1;
+    return events_;
 }
 
 void evq_pop() {
@@ -63,6 +64,7 @@ event* evq_front() {
 
 /* TIMED EVENTS ------------------------------------------------------------- */
 
+/* Timer will give interrupt every (1) millisecond */
 void init_evq_timer(void) {
     TCCR2A |= _BV(WGM21); // CTC
     OCR2A = 8; // ~1ms
@@ -75,35 +77,50 @@ typedef struct {
     uint16_t timer;
 } timed_event;
 
-timed_event timed_ebuf_[BUFMAX];
+#define TIMED_BUFMAX 32
+timed_event timed_ebuf_[TIMED_BUFMAX];
 uint8_t timed_events_ = 0;
 
+/* Implements small hash table for timed callback events
+ * waitms is time in milliseconds after callback function is called.
+ *
+ * If user pushes event with same callback and data values the old one is
+ * overwritten.
+ */
 void evq_timed_push(void (*callback)(uint16_t),
                     uint16_t data,
-                    uint16_t waitms) {
-    timed_event timed_ev;
-    event new_event = {callback, data};
-    timed_ev.data = new_event; timed_ev.timer = waitms;
+                    uint16_t waitms)
+{
+    timed_event timed_ev = {{callback, data}, waitms};
+
+    uint8_t hash = ((uint16_t)callback+data) % TIMED_BUFMAX;
+
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-        timed_ebuf_[timed_events_] = timed_ev;
-        timed_events_++;
+        timed_ebuf_[hash] = timed_ev;
+        // TODO: etsi vapaa kohta
+        // timed_ebuf_[hash].data.callback == callback
     }
 }
 
+/* Loops through hash table and pushes events which timer has reached zero
+ * to event queue.
+ *
+ * TIMER2 ISR calls this function every 1 millisecond
+ */
 void evq_timer_tick() {
-    int idx;
-    for(idx = 0; idx < timed_events_; idx++) {
-        if(--timed_ebuf_[idx].timer == 0) {
-            ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-                evq_push(timed_ebuf_[idx].data.callback,
-                         timed_ebuf_[idx].data.data);
-
-                // move last event in buffer over idx
-                timed_ebuf_[idx] = timed_ebuf_[timed_events_ - 1];
-                timed_events_--;
-                idx = 0; // start loop from beginning
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    for(int idx = 0; idx < TIMED_BUFMAX; idx++) {
+        if(--timed_ebuf_[idx].timer == 0 &&
+             timed_ebuf_[idx].data.callback != 0) {
+            if(evq_push(timed_ebuf_[idx].data.callback,
+                        timed_ebuf_[idx].data.data)) {
+                timed_ebuf_[idx].data.callback = 0; // mark as done
+            } else {
+                // there is no space in evq, try again next round
+                timed_ebuf_[idx].timer++;
             }
-        };
+        }
+    }
     }
 }
 

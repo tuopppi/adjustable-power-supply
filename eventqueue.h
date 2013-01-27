@@ -15,9 +15,9 @@ typedef struct event {
 } event;
 
 /* Adds a new element at the end of the queue 
- * Returns 1 on success and -1 on failure 
+ * Returns number of events in buffer on success and 0 on failure
  */
-int8_t evq_push(void (*callback)(uint16_t), uint16_t data);
+uint8_t evq_push(void (*callback)(uint16_t), uint16_t data);
 
 /* Returns a pointer to the next event in the queue */
 event* evq_front();
@@ -27,8 +27,9 @@ void evq_pop();
 
 void init_evq_timer(void);
 
+/* Returns number of events in buffer on success and 0 on failure */
 void evq_timed_push(void (*callback)(uint16_t),
-                    uint16_t data,
-                    uint16_t waitms);
+                       uint16_t data,
+                       uint16_t waitms);
 
 #endif

@@ -14,12 +14,14 @@
 #include "eventqueue.h"
 
 void initialize(void) {
+    init_evq_timer();
+
     set_current_limit(read_eeprom_current_limit());
     init_voltage_pwm();
     init_display();
     init_controls();
     init_adc();
-    init_evq_timer();
+
 }
 
 int main(void) {

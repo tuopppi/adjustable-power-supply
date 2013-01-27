@@ -41,7 +41,6 @@ void init_voltage_pwm(void);
 void set_voltage(uint16_t set_voltage);
 uint16_t* get_voltage();
 
-
 /* SPI  ------------------------------------------------------------------------
  * used to communicate with two 74HC595 sift registers
  */
