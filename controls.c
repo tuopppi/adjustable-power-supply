@@ -50,8 +50,6 @@ void voltage_knob_handler(uint16_t usr_input) {
     }
 }
 
-
-
 void set_and_save_current(int8_t diff) {
     set_current_limit(*get_current_limit() + diff);
     set_dynamic_readout(get_current_limit());
@@ -72,7 +70,7 @@ void current_knob_handler(uint16_t usr_input) {
         break;
 
     case CURRENT_BTN:
-        set_dynamic_readout(&display_current);
+        set_dynamic_readout(get_current());
         break;
     }
 }
@@ -83,10 +81,7 @@ void button_handler(uint16_t usr_input) {
     }
 }
 
-/*
- * CONTROLS
- *
- * VOLTAGE
+/* VOLTAGE
  * =======
  * ENC1 A - PD5 - PCINT21 - PCMSK2 -(sininen)
  * ENC1 B - PB6 - (punainen)
@@ -101,7 +96,6 @@ void button_handler(uint16_t usr_input) {
  * TACTILE SW
  * ==========
  * PD4 - PCINT20 - PCMSK2
- *
  */
 
 void init_controls(void) {
@@ -123,22 +117,17 @@ enum encoderid {
 };
 
 uint16_t encoder_direction(uint8_t id) {
-    uint8_t direction;
     switch(id) {
     case ENC_CURRENT:
-        direction = PIND & _BV(PIND6);
-        if(direction) { return CURRENT_LEFT; }
+        if(PIND & _BV(PIND6)) { return CURRENT_LEFT; }
         else { return CURRENT_RIGHT; }
-        break;
 
     case ENC_VOLTAGE:
-        direction = PINB & _BV(PINB6);
-        if(direction) { return VOLTAGE_LEFT; }
+        if(PINB & _BV(PINB6)) { return VOLTAGE_LEFT; }
         else { return VOLTAGE_RIGHT; }
-        break;
     }
-    return UNKNOWN_INPUT;
 
+    return UNKNOWN_INPUT;
 }
 
 ISR(PCINT0_vect) {
@@ -149,6 +138,7 @@ ISR(PCINT0_vect) {
 }
 
 ISR(PCINT2_vect) {
+    // TODO: Cant react to VOLTAGE knob while switch is pressed
     static uint8_t wait_for_btn_release = 0;
 
     // TACTILE SW RELEASE

@@ -6,11 +6,11 @@
  * This file is part of variable-power-supply project.
  */
 
-#include <stdint.h>
-#include <avr/interrupt.h>
-#include <util/atomic.h>
 #include "eventqueue.h"
 #include "display.h"
+#include <inttypes.h>
+#include <avr/interrupt.h>
+#include <util/atomic.h>
 
 // FIFO - ring buffer
 #define BUFMAX 64

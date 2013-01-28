@@ -70,18 +70,18 @@ uint16_t* get_voltage() {
 #define ADCREFVCC 5000
 #define ADCREFINIT ADCREF11
 
-volatile unsigned int current; // adc values (0-1023)
 volatile unsigned int adc_reference;
+uint16_t display_current;
 
 void init_adc(void) {
     // 1.1V with external capacitor at AREF pin
     // select ADC0
     ADMUX |= _BV(REFS0) | _BV(REFS1);
     // ADC-clk = 1MHz / 128 = 7812Hz
-    ADCSRA |= _BV(ADEN) | _BV(ADSC) | _BV(ADIE) | _BV(ADPS0) | _BV(ADPS1) | _BV(ADPS2);
+    ADCSRA |= _BV(ADEN) | _BV(ADSC) | _BV(ADIE) |
+              _BV(ADPS0) | _BV(ADPS1) | _BV(ADPS2);
 
     adc_reference = ADCREFINIT;
-    current = 0;
 
     ADCSRA |= _BV(ADSC); // start new conversion
 }
@@ -102,7 +102,8 @@ void current_handeler(uint16_t current) {
         set_voltage(*get_voltage());
     }
 
-    // determines how often display is updated
+    // TODO: tee fiksummin
+    // how often displayed current value is updated
     // smaller value means faster update
     static uint16_t display_update = 0;
     if(display_update > 5000) {
@@ -139,6 +140,10 @@ ISR(ADC_vect) {
     evq_push(current_handeler, current);
 
     ADCSRA |= _BV(ADSC); // start new conversion
+}
+
+uint16_t* get_current() {
+    return &display_current
 }
 
 /* EEPROM */
