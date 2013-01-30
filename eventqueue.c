@@ -77,7 +77,7 @@ typedef struct {
     uint16_t timer;
 } timed_event;
 
-#define TIMED_BUFMAX 32
+#define TIMED_BUFMAX 31
 timed_event timed_ebuf_[TIMED_BUFMAX];
 uint8_t timed_events_ = 0;
 
@@ -93,7 +93,8 @@ void evq_timed_push(void (*callback)(uint16_t),
 {
     timed_event timed_ev = {{callback, data}, waitms};
 
-    uint8_t hash = ((uint16_t)callback+data) % TIMED_BUFMAX;
+    uint16_t k = (uint16_t)callback+data;
+    uint8_t hash = (k*(k+3)) % TIMED_BUFMAX;
 
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         timed_ebuf_[hash] = timed_ev;

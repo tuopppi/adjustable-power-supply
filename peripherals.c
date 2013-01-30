@@ -7,16 +7,14 @@
  */
 
 #include "peripherals.h"
-#include "mode.h"
+#include "eventqueue.h"
 #include "display.h"
 #include <avr/interrupt.h>
 #include <inttypes.h>
 #include <avr/io.h>
-#include <stdlib.h>
 #include <avr/eeprom.h>
-#include "eventqueue.h"
 
-/* PWM */
+/* PWM ---------------------------------------------------------------------- */
 uint16_t voltage;
 
 void init_voltage_pwm(void) {
@@ -64,7 +62,7 @@ uint16_t* get_voltage() {
     return &voltage;
 }
 
-/* ADC */
+/* ADC ---------------------------------------------------------------------- */
 
 #define ADCREF11 1100
 #define ADCREFVCC 5000
@@ -106,10 +104,16 @@ void current_handeler(uint16_t current) {
     // how often displayed current value is updated
     // smaller value means faster update
     static uint16_t display_update = 0;
+
+    if(display_update % 1000 == 0 && current > *get_current_limit()) {
+        status_led_toggle(LED_CURRENT);
+    }
+
     if(display_update > 5000) {
         display_current = current;
         display_update = 0;
     }
+
     display_update++;
 
     // select Vref of ADC
@@ -125,25 +129,44 @@ void current_handeler(uint16_t current) {
 
 }
 
+/* ADC finished, result in ADC register */
 ISR(ADC_vect) {
-    /* ADC Conversion finished
-     * Result is saved to ADC register
-     */
     static float adc_reference_prev = ADCREFINIT;
-    // if reference changes, discard adc result
+
+    // if reference changes, discard result
     if(adc_reference_prev == adc_reference) {
-        current = ADC;
+        evq_push(current_handeler, ADC);
     } else {
         adc_reference_prev = adc_reference;
     }
-
-    evq_push(current_handeler, current);
 
     ADCSRA |= _BV(ADSC); // start new conversion
 }
 
 uint16_t* get_current() {
-    return &display_current
+    return &display_current;
+}
+
+/* limits ------------------------------------------------------------------- */
+uint16_t current_limit; // mA
+
+void set_current_limit(uint16_t limit) {
+    if(limit >= 10 && limit < 3000) {
+        current_limit = limit;
+    } else if (limit < 10) {
+        current_limit = 10;
+    } else {
+        current_limit = 2999;
+    }
+}
+
+uint16_t* get_current_limit(void) {
+    return &current_limit;
+}
+
+void limit_current(void) {
+    // set PWM output => 0
+    OCR1A = 0;
 }
 
 /* EEPROM */
@@ -168,15 +191,14 @@ uint16_t read_eeprom_voltage(void) {
     return eeprom_read_word(&eeprom_voltage);
 }
 
-/* SPI */
+/* SPI ---------------------------------------------------------------------- */
 
 #define spi_begin() PORTC &= ~(_BV(PC5));
 #define spi_end() PORTC |= (_BV(PC5));
 
 volatile uint16_t spi_data_word;
 
-/*
- * MOSI - PB3
+/* MOSI - PB3
  * SCK  - PB5
  * RCK  - PC5
  */

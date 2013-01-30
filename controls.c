@@ -96,6 +96,9 @@ void button_handler(uint16_t usr_input) {
  * TACTILE SW
  * ==========
  * PD4 - PCINT20 - PCMSK2
+ *
+ * TOGGLE SW
+ * PC4 - PCINT12 - PCMSK1
  */
 
 void init_controls(void) {
@@ -104,8 +107,9 @@ void init_controls(void) {
     PORTD |= _BV(PORTD2) | _BV(PORTD3) |_BV(PORTD4) | _BV(PORTD5) | _BV(PORTD6);
     // Pin change interrupts
     PCMSK0 |= _BV(PCINT7);
+    PCMSK1 |= _BV(PCINT12);
     PCMSK2 |= _BV(PCINT21) | _BV(PCINT20);
-    PCICR |= _BV(PCIE0) | _BV(PCIE2);
+    PCICR |= _BV(PCIE0) | _BV(PCIE1) | _BV(PCIE2);
     // ext interrupts (INT0, INT1), falling edge
     EICRA |= _BV(ISC11) | _BV(ISC01);
     EIMSK |= _BV(INT0) | _BV(INT1);
@@ -135,6 +139,15 @@ ISR(PCINT0_vect) {
     if(PINB & _BV(PINB7)) {
         evq_push(current_knob_handler, encoder_direction(ENC_CURRENT));
     }
+}
+
+ISR(PCINT1_vect) {
+    status_led_toggle(LED_VOLTAGE);
+    /*if(PINC & _BV(PINC4)) {
+        status_led_off(LED_VOLTAGE);
+    } else {
+        status_led_on(LED_VOLTAGE);
+    }*/
 }
 
 ISR(PCINT2_vect) {

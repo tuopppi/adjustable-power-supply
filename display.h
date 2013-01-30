@@ -11,7 +11,6 @@
 
 #include <inttypes.h>
 #include <avr/io.h>
-#include "mode.h"
 
 enum special_display {
     DISPLAY_CUR = 3000

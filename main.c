@@ -10,7 +10,6 @@
 #include "peripherals.h"
 #include "controls.h"
 #include "display.h"
-#include "mode.h"
 #include "eventqueue.h"
 
 void initialize(void) {
