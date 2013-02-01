@@ -17,6 +17,6 @@
 * current limiting  
 
 ## Design
-[![Schematic](https://dl.dropbox.com/u/4476572/photos/power-supply-schema.png)](https://github.com/tuopppi/adjustable-power-supply/blob/master/power-supply-schematic.pdf)  
+[![Schematic](https://dl.dropbox.com/u/4476572/photos/power-supply-schema.png)](https://github.com/tuopppi/adjustable-power-supply/blob/master/CAD/power-supply-schematic.pdf)  
 ![PCB](https://dl.dropbox.com/u/4476572/photos/power-supply-pcb.png)
 
